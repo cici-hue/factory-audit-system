@@ -1,0 +1,954 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
+import { auditModules, TOTAL_SCORE } from '../data/modules';
+import { AuditResult, Customer } from '../types';
+import {
+  CheckCircle2,
+  XCircle,
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  Save,
+  FileText,
+  RotateCcw,
+  Download,
+  CheckSquare,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { generatePDF } from '../utils/pdfGenerator';
+
+export default function AuditPage() {
+  const {
+    user,
+    factoryList,
+    supplierList,
+    customerList,
+    addEvaluation,
+    updateEvaluation,
+    currentAuditResults,
+    setCurrentAuditResults,
+    clearCurrentAuditResults,
+    isEditMode,
+    editingRecord,
+    setEditMode,
+    getEvaluationsByFactory,
+  } = useApp();
+
+  // 表单状态
+  const [selectedFactory, setSelectedFactory] = useState<number>(factoryList[0]?.id || 0);
+  const [evalDate, setEvalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [evalType, setEvalType] = useState<'常规审核' | '整改复查' | '随机抽查'>('常规审核');
+  const [selectedSupplier, setSelectedSupplier] = useState<number>(supplierList[0]?.id || 0);
+  const [selectedCustomers, setSelectedCustomers] = useState<number[]>([]);
+  const [orderNo, setOrderNo] = useState('');
+  const [styleNo, setStyleNo] = useState('');
+  const [productionStatus, setProductionStatus] = useState('');
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [comments, setComments] = useState('');
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+  const [expandedSubModules, setExpandedSubModules] = useState<Set<string>>(new Set());
+  const [customers] = useState<Customer[]>(customerList);
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+
+  // 整改复查相关
+  const [lastEvaluation, setLastEvaluation] = useState<any>(null);
+  const [onlyShowLastFailed, setOnlyShowLastFailed] = useState(false);
+
+  // 初始化
+  useEffect(() => {
+    if (isEditMode && editingRecord) {
+      setSelectedFactory(editingRecord.factoryId);
+      setEvalDate(editingRecord.evalDate);
+      setEvalType(editingRecord.evalType);
+      setSelectedSupplier(editingRecord.supplierId || supplierList[0]?.id || 0);
+      setSelectedCustomers(editingRecord.customerId ? [editingRecord.customerId] : []);
+      setOrderNo(editingRecord.orderNo || '');
+      setStyleNo(editingRecord.styleNo || '');
+      setProductionStatus(editingRecord.productionStatus || '');
+      setSelectedModules(editingRecord.selectedModules);
+      setComments(editingRecord.comments);
+      setCurrentAuditResults(editingRecord.results);
+
+      // 展开所有模块
+      const allModules = new Set<string>();
+      const allSubModules = new Set<string>();
+      auditModules.forEach(mod => {
+        if (editingRecord.selectedModules.includes(mod.name)) {
+          allModules.add(mod.id);
+          Object.keys(mod.subModules).forEach(sub => {
+            allSubModules.add(`${mod.id}-${sub}`);
+          });
+        }
+      });
+      setExpandedModules(allModules);
+      setExpandedSubModules(allSubModules);
+    } else {
+      clearCurrentAuditResults();
+      setSelectedModules(auditModules.map(m => m.name));
+      setExpandedModules(new Set(auditModules.map(m => m.id)));
+      auditModules.forEach(mod => {
+        Object.keys(mod.subModules).forEach(sub => {
+          expandedSubModules.add(`${mod.id}-${sub}`);
+        });
+      });
+    }
+  }, [isEditMode, editingRecord, supplierList]);
+
+  // 点击外部关闭客户下拉框
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.customer-dropdown-container')) {
+        setIsCustomerDropdownOpen(false);
+      }
+    };
+
+    if (isCustomerDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCustomerDropdownOpen]);
+
+  // 整改复查时获取上次评估
+  useEffect(() => {
+    if (evalType === '整改复查' && selectedFactory) {
+      const pastEvals = getEvaluationsByFactory(selectedFactory);
+      if (pastEvals.length > 0) {
+        const sorted = [...pastEvals].sort((a, b) =>
+          new Date(b.evalDate).getTime() - new Date(a.evalDate).getTime()
+        );
+        setLastEvaluation(sorted[0]);
+      } else {
+        setLastEvaluation(null);
+      }
+    } else {
+      setLastEvaluation(null);
+    }
+  }, [evalType, selectedFactory]);
+
+  // 监听评估类型变化，重置模块选择
+  useEffect(() => {
+    if (!isEditMode) {
+      if (evalType === '常规审核') {
+        // 常规审核默认全选
+        setSelectedModules(auditModules.map(m => m.name));
+        setExpandedModules(new Set(auditModules.map(m => m.id)));
+      } else {
+        // 整改复查/随机抽查默认清空，让用户手动选择
+        setSelectedModules([]);
+        setExpandedModules(new Set());
+      }
+      setOnlyShowLastFailed(false);
+      clearCurrentAuditResults();
+    }
+  }, [evalType, isEditMode]);
+
+  // 切换模块选中状态
+  const toggleModuleSelection = (moduleName: string) => {
+    setSelectedModules(prev => {
+      if (prev.includes(moduleName)) {
+        return prev.filter(m => m !== moduleName);
+      } else {
+        return [...prev, moduleName];
+      }
+    });
+  };
+
+  // 计算当前得分
+  const { currentScore, percentage, moduleScores } = useMemo(() => {
+    let score = 0;
+    const modScores: { [key: string]: number } = {};
+
+    auditModules.forEach(mod => {
+      if (!selectedModules.includes(mod.name)) return;
+      let modScore = 0;
+
+      Object.values(mod.subModules).forEach(subMod => {
+        subMod.items.forEach(item => {
+          const result = currentAuditResults[item.id];
+          if (result?.isChecked) {
+            modScore += item.score;
+            score += item.score;
+          }
+        });
+      });
+
+      modScores[mod.name] = modScore;
+    });
+
+    return {
+      currentScore: score,
+      percentage: (score / TOTAL_SCORE) * 100,
+      moduleScores: modScores,
+    };
+  }, [currentAuditResults, selectedModules]);
+
+  // 处理复选框变更
+  const handleCheckChange = (itemId: string, checked: boolean) => {
+    setCurrentAuditResults({
+      ...currentAuditResults,
+      [itemId]: {
+        ...currentAuditResults[itemId],
+        isChecked: checked,
+      },
+    });
+  };
+
+  // 处理详情选择
+  const handleDetailsChange = (itemId: string, details: string[]) => {
+    setCurrentAuditResults({
+      ...currentAuditResults,
+      [itemId]: {
+        ...currentAuditResults[itemId],
+        details,
+      },
+    });
+  };
+
+  // 处理评论输入
+  const handleCommentChange = (itemId: string, comment: string) => {
+    setCurrentAuditResults({
+      ...currentAuditResults,
+      [itemId]: {
+        ...currentAuditResults[itemId],
+        comment,
+      },
+    });
+  };
+
+  // 处理图片上传（模拟）
+  const handleImageUpload = (itemId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCurrentAuditResults({
+        ...currentAuditResults,
+        [itemId]: {
+          ...currentAuditResults[itemId],
+          imagePath: reader.result as string,
+        },
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 删除图片
+  const handleDeleteImage = (itemId: string) => {
+    setCurrentAuditResults({
+      ...currentAuditResults,
+      [itemId]: {
+        ...currentAuditResults[itemId],
+        imagePath: null,
+      },
+    });
+  };
+
+  // 切换模块展开状态
+  const toggleModule = (moduleId: string) => {
+    const newExpanded = new Set(expandedModules);
+    if (newExpanded.has(moduleId)) {
+      newExpanded.delete(moduleId);
+    } else {
+      newExpanded.add(moduleId);
+    }
+    setExpandedModules(newExpanded);
+  };
+
+  // 切换子模块展开状态
+  const toggleSubModule = (moduleId: string, subModuleName: string) => {
+    const key = `${moduleId}-${subModuleName}`;
+    const newExpanded = new Set(expandedSubModules);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedSubModules(newExpanded);
+  };
+
+  // 全选/清空
+  const handleSelectAll = () => {
+    const newResults: { [key: string]: AuditResult } = {};
+    auditModules.forEach(mod => {
+      if (!selectedModules.includes(mod.name)) return;
+      Object.values(mod.subModules).forEach(subMod => {
+        subMod.items.forEach(item => {
+          newResults[item.id] = { isChecked: true, details: [], imagePath: null };
+        });
+      });
+    });
+    setCurrentAuditResults(newResults);
+  };
+
+  const handleClearAll = () => {
+    const newResults: { [key: string]: AuditResult } = {};
+    auditModules.forEach(mod => {
+      if (!selectedModules.includes(mod.name)) return;
+      Object.values(mod.subModules).forEach(subMod => {
+        subMod.items.forEach(item => {
+          newResults[item.id] = { isChecked: false, details: [], imagePath: null };
+        });
+      });
+    });
+    setCurrentAuditResults(newResults);
+  };
+
+  // 保存评估
+  const handleSave = () => {
+    const factory = factoryList.find(f => f.id === selectedFactory);
+    if (!factory) {
+      toast.error('请选择工厂');
+      return;
+    }
+
+    // 验证至少选择一个模块
+    if (selectedModules.length === 0) {
+      toast.error('请至少选择一个评估模块');
+      return;
+    }
+
+    const evaluation = {
+      factoryId: selectedFactory,
+      factoryName: factory.name,
+      evaluator: user?.name || '',
+      evaluatorId: user?.id || '',
+      evalDate,
+      evalType,
+      supplierId: selectedSupplier || undefined,
+      supplierName: supplierList.find(s => s.id === selectedSupplier)?.name || undefined,
+      customerId: selectedCustomers.length > 0 ? selectedCustomers[0] : undefined,
+      customerName: selectedCustomers.length > 0 ? customers.find(c => c.id === selectedCustomers[0])?.name : undefined,
+      customerIds: selectedCustomers.length > 0 ? selectedCustomers : undefined,
+      customerNames: selectedCustomers.length > 0 ? selectedCustomers.map(id => customers.find(c => c.id === id)?.name).filter(Boolean) as string[] : undefined,
+      orderNo: orderNo.trim() || undefined,
+      styleNo: styleNo.trim() || undefined,
+      productionStatus: productionStatus.trim() || undefined,
+      selectedModules,
+      overallPercent: percentage,
+      results: currentAuditResults,
+      comments,
+      // Supabase 表需要的字段（写入时会用到）
+      result: 'pending' as const,
+    };
+
+    let savedRecord;
+    if (isEditMode && editingRecord) {
+      updateEvaluation(editingRecord.id, evaluation);
+      savedRecord = { ...editingRecord, ...evaluation };
+      toast.success('评估报告已更新');
+      setEditMode(false);
+      clearCurrentAuditResults();
+    } else {
+      addEvaluation(evaluation);
+      savedRecord = {
+        ...evaluation,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      toast.success('评估报告已保存');
+      clearCurrentAuditResults();
+    }
+
+    // 生成并下载PDF
+    generatePDF(savedRecord);
+    toast.success('PDF报告已生成并下载');
+
+    // 重置表单
+    setComments('');
+  };
+
+  // 取消编辑
+  const handleCancelEdit = () => {
+    setEditMode(false);
+    clearCurrentAuditResults();
+    setComments('');
+  };
+
+  // 获取上次评估状态
+  const getLastStatus = (itemId: string): string => {
+    if (!lastEvaluation) return '';
+    const r = lastEvaluation.results?.[itemId];
+    if (!r) return '';
+    return r.isChecked ? '上次合格' : '上次不合格';
+  };
+
+  const lastFailedItemIds = useMemo(() => {
+    if (evalType !== '整改复查' || !lastEvaluation?.results) return new Set<string>();
+    const s = new Set<string>();
+    Object.entries(lastEvaluation.results).forEach(([itemId, r]: any) => {
+      if (r && r.isChecked === false) s.add(itemId);
+    });
+    return s;
+  }, [evalType, lastEvaluation]);
+
+  const lastFailedModuleIds = useMemo(() => {
+    if (lastFailedItemIds.size === 0) return new Set<string>();
+    const modIds = new Set<string>();
+    auditModules.forEach((mod) => {
+      let hasFail = false;
+      Object.values(mod.subModules).forEach((sub) => {
+        sub.items.forEach((item) => {
+          if (lastFailedItemIds.has(item.id)) hasFail = true;
+        });
+      });
+      if (hasFail) modIds.add(mod.id);
+    });
+    return modIds;
+  }, [lastFailedItemIds]);
+
+  const moduleTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    auditModules.forEach((mod) => {
+      let total = 0;
+      Object.values(mod.subModules).forEach((sub) => {
+        sub.items.forEach((item) => {
+          total += item.score;
+        });
+      });
+      totals[mod.name] = total;
+    });
+    return totals;
+  }, []);
+
+  const modulePercentages = useMemo(() => {
+    const perc: Record<string, number> = {};
+    Object.entries(moduleScores).forEach(([name, score]) => {
+      const total = moduleTotals[name] || 0;
+      perc[name] = total > 0 ? (score / total) * 100 : 0;
+    });
+    return perc;
+  }, [moduleScores, moduleTotals]);
+
+  return (
+    <div className="space-y-6">
+      {/* 编辑模式提示 */}
+      {isEditMode && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-amber-800">
+            <RotateCcw className="w-5 h-5" />
+            <span>正在编辑历史记录：{editingRecord?.evalDate}</span>
+          </div>
+          <button
+            onClick={handleCancelEdit}
+            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg transition-colors"
+          >
+            取消编辑
+          </button>
+        </div>
+      )}
+
+      {/* 基础配置 */}
+      <div className="bg-white rounded-2xl shadow-sm border p-6">
+        <h2 className="text-lg font-semibold mb-4">欢迎回来，评估员！</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">评估工厂</label>
+            <select
+              value={selectedFactory}
+              onChange={(e) => setSelectedFactory(Number(e.target.value))}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {factoryList.map(factory => (
+                <option key={factory.id} value={factory.id}>{factory.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">供应商</label>
+            <select
+              value={selectedSupplier}
+              onChange={(e) => setSelectedSupplier(Number(e.target.value))}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {supplierList.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="customer-dropdown-container">
+            <label className="block text-sm font-medium text-slate-700 mb-2">客户</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between"
+              >
+                <span className={selectedCustomers.length === 0 ? 'text-slate-400' : 'text-slate-700'}>
+                  {selectedCustomers.length === 0 ? '请选择客户' : `${selectedCustomers.length} 个客户已选择`}
+                </span>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isCustomerDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isCustomerDropdownOpen && (
+                <div className="absolute z-50 w-full mt-2 bg-white border rounded-xl shadow-lg max-h-[250px] overflow-y-auto">
+                  <div className="p-3 border-b">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="select-all-customers"
+                        checked={selectedCustomers.length === customers.length && customers.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedCustomers(customers.map(c => c.id));
+                          } else {
+                            setSelectedCustomers([]);
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <label htmlFor="select-all-customers" className="text-sm text-slate-700 cursor-pointer select-none">
+                        全选
+                      </label>
+                    </div>
+                  </div>
+                  <div className="p-2">
+                    {customers.map(c => (
+                      <div key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded">
+                        <input
+                          type="checkbox"
+                          id={`customer-${c.id}`}
+                          checked={selectedCustomers.includes(c.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCustomers([...selectedCustomers, c.id]);
+                            } else {
+                              setSelectedCustomers(selectedCustomers.filter(id => id !== c.id));
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <label htmlFor={`customer-${c.id}`} className="text-sm text-slate-700 cursor-pointer select-none">
+                          {c.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-2 border-t bg-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerDropdownOpen(false)}
+                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
+                    >
+                      确定
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">评估日期</label>
+            <input
+              type="date"
+              value={evalDate}
+              onChange={(e) => setEvalDate(e.target.value)}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">审核性质</label>
+            <select
+              value={evalType}
+              onChange={(e) => setEvalType(e.target.value as '常规审核' | '整改复查' | '随机抽查')}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="常规审核">常规审核</option>
+              <option value="整改复查">整改复查</option>
+              <option value="随机抽查">随机抽查</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">评估人员</label>
+            <input
+              type="text"
+              value={user?.name || ''}
+              disabled
+              className="w-full px-4 py-2 border rounded-xl bg-slate-50 text-slate-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">订单号</label>
+            <input
+              type="text"
+              value={orderNo}
+              onChange={(e) => setOrderNo(e.target.value)}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入订单号"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">款号</label>
+            <input
+              type="text"
+              value={styleNo}
+              onChange={(e) => setStyleNo(e.target.value)}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入款号"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">生产状态</label>
+            <input
+              type="text"
+              value={productionStatus}
+              onChange={(e) => setProductionStatus(e.target.value)}
+              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入生产状态"
+            />
+          </div>
+        </div>
+
+        {/* 整改复查提示 */}
+        {evalType === '整改复查' && lastEvaluation && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <p className="text-blue-800">
+              上次评估日期：{lastEvaluation.evalDate}，得分率：{lastEvaluation.overallPercent.toFixed(2)}%
+            </p>
+          </div>
+        )}
+
+        {/* 整改复查/随机抽查-模块选择 */}
+        {(evalType === '整改复查' || evalType === '随机抽查') && (
+          <div className="mt-4 pt-4 border-t">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckSquare className="w-5 h-5 text-blue-600" />
+              <span className="font-medium text-slate-700">
+                {evalType === '整改复查' ? '请选择需要复查的模块（可多选）' : '请选择抽查的模块（可多选）'}
+              </span>
+
+              {evalType === '整改复查' && (
+                <label className="ml-auto flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={onlyShowLastFailed}
+                    onChange={(e) => setOnlyShowLastFailed(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    disabled={!lastEvaluation || lastFailedItemIds.size === 0}
+                  />
+                  只显示上次不合格模块
+                </label>
+              )}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {auditModules
+                .filter((mod) => {
+                  if (evalType !== '整改复查') return true;
+                  if (!onlyShowLastFailed) return true;
+                  return lastFailedModuleIds.has(mod.id);
+                })
+                .map(mod => (
+                <label
+                  key={mod.id}
+                  className={`flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors ${
+                    selectedModules.includes(mod.name)
+                      ? 'bg-blue-50 border-2 border-blue-300'
+                      : 'bg-slate-50 border-2 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedModules.includes(mod.name)}
+                    onChange={() => toggleModuleSelection(mod.name)}
+                    className="hidden"
+                  />
+                  <div className={`w-5 h-5 rounded flex items-center justify-center ${
+                    selectedModules.includes(mod.name) ? 'bg-blue-600' : 'bg-slate-300'
+                  }`}>
+                    {selectedModules.includes(mod.name) && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="text-sm font-medium">{mod.name}</span>
+                </label>
+              ))}
+            </div>
+            {selectedModules.length === 0 && (
+              <p className="mt-3 text-sm text-amber-600">请至少选择一个模块进行复查</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <button
+            onClick={handleSelectAll}
+            className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
+          >
+            全选
+          </button>
+          <button
+            onClick={handleClearAll}
+            className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
+          >
+            清空
+          </button>
+        </div>
+        <div className="text-lg font-semibold">
+          总得分率：<span className="text-blue-600">{percentage.toFixed(2)}%</span>
+        </div>
+      </div>
+
+      {/* 评估模块列表 */}
+      <div className="space-y-4">
+        {auditModules
+          .filter(mod => selectedModules.includes(mod.name))
+          .filter((mod) => {
+            if (evalType !== '整改复查') return true;
+            if (!onlyShowLastFailed) return true;
+            return lastFailedModuleIds.has(mod.id);
+          })
+          .map(module => (
+            <div key={module.id} className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+              {/* 模块标题 */}
+              <button
+                onClick={() => toggleModule(module.id)}
+                className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-semibold">{module.name}</span>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-lg">
+                    {(modulePercentages[module.name] ?? 0).toFixed(1)}%
+                  </span>
+                </div>
+                {expandedModules.has(module.id) ? (
+                  <ChevronUp className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                )}
+              </button>
+
+              {/* 子模块列表 */}
+              {expandedModules.has(module.id) && (
+                <div className="divide-y">
+                  {Object.entries(module.subModules)
+                    .filter(([subModuleName, subModule]) => {
+                      if (evalType !== '整改复查' || !onlyShowLastFailed) return true;
+                      return subModule.items.some((it) => lastFailedItemIds.has(it.id));
+                    })
+                    .map(([subModuleName, subModule]) => {
+                    const subModuleKey = `${module.id}-${subModuleName}`;
+                    const subModuleScore = subModule.items.reduce((sum, item) => {
+                      return sum + (currentAuditResults[item.id]?.isChecked ? item.score : 0);
+                    }, 0);
+                    const subModuleTotal = subModule.items.reduce((sum, item) => sum + item.score, 0);
+                    const subModulePercent = subModuleTotal > 0 ? (subModuleScore / subModuleTotal) * 100 : 0;
+
+                    return (
+                      <div key={subModuleKey}>
+                        <button
+                          onClick={() => toggleSubModule(module.id, subModuleName)}
+                          className="w-full px-6 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{subModuleName}</span>
+                            <span className="text-sm text-slate-500">
+                              ({subModulePercent.toFixed(1)}%)
+                            </span>
+                          </div>
+                          {expandedSubModules.has(subModuleKey) ? (
+                            <ChevronUp className="w-4 h-4 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                          )}
+                        </button>
+
+                        {expandedSubModules.has(subModuleKey) && (
+                          <div className="px-6 pb-4 space-y-3">
+                            {subModule.items
+                              .filter((item) => {
+                                if (evalType !== '整改复查' || !onlyShowLastFailed) return true;
+                                return lastFailedItemIds.has(item.id);
+                              })
+                              .map(item => {
+                              const result = currentAuditResults[item.id] || {
+                                isChecked: false,
+                                details: [],
+                                imagePath: null,
+                              };
+                              const lastStatus = getLastStatus(item.id);
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={`p-4 rounded-xl border-2 transition-colors ${
+                                    result.isChecked
+                                      ? 'border-green-200 bg-green-50/50'
+                                      : 'border-slate-100'
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-4">
+                                    {/* 复选框 */}
+                                    <div className="flex-shrink-0 pt-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={result.isChecked}
+                                        onChange={(e) => handleCheckChange(item.id, e.target.checked)}
+                                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                      />
+                                    </div>
+
+                                    {/* 评分项内容 */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={item.isKey ? 'text-orange-600 font-medium' : ''}>
+                                          {item.name}
+                                        </span>
+                                        {item.isKey && (
+                                          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
+                                            关键项
+                                          </span>
+                                        )}
+                                        {lastStatus && (
+                                          <span
+                                            className={`text-xs ${
+                                              lastStatus.includes('合格')
+                                                ? 'text-green-600'
+                                                : 'text-red-600'
+                                            }`}
+                                          >
+                                            | {lastStatus}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* 未通过时显示详情选择 - 改为复选框多选 */}
+                                      {!result.isChecked && item.details.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {item.details.map((detail) => (
+                                            <label
+                                              key={detail}
+                                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
+                                                result.details.includes(detail)
+                                                  ? 'bg-red-100 text-red-700 border border-red-200'
+                                                  : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                              }`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={result.details.includes(detail)}
+                                                onChange={(e) => {
+                                                  const newDetails = e.target.checked
+                                                    ? [...result.details, detail]
+                                                    : result.details.filter((d) => d !== detail);
+                                                  handleDetailsChange(item.id, newDetails);
+                                                }}
+                                                className="hidden"
+                                              />
+                                              {detail}
+                                            </label>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* 未通过时显示评论输入框 */}
+                                      {!result.isChecked && (
+                                        <div className="mt-3">
+                                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            评论：
+                                          </label>
+                                          <textarea
+                                            value={result.comment || ''}
+                                            onChange={(e) => handleCommentChange(item.id, e.target.value)}
+                                            placeholder="请输入评论..."
+                                            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
+                                          />
+                                        </div>
+                                      )}
+
+                                      {/* 改进建议 */}
+                                      {!result.isChecked && item.comment && (
+                                        <div className="mt-2 text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                                          💡 建议：{item.comment}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* 拍照上传 */}
+                                    <div className="flex-shrink-0">
+                                      <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                        <Camera className="w-4 h-4" />
+                                        <span className="text-sm">拍照</span>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleImageUpload(item.id, file);
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+
+                                    {/* 图片预览 */}
+                                    {result.imagePath && (
+                                      <div className="flex-shrink-0 relative">
+                                        <img
+                                          src={result.imagePath}
+                                          alt="证据"
+                                          className="w-16 h-16 object-cover rounded-lg"
+                                        />
+                                        <button
+                                          onClick={() => handleDeleteImage(item.id)}
+                                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+      </div>
+
+      {/* 评估汇总 */}
+      <div className="bg-white rounded-2xl shadow-sm border p-6">
+        <h2 className="text-lg font-semibold mb-4">评估汇总</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">综合评估意见</label>
+            <textarea
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="请输入综合评估意见..."
+              rows={4}
+              className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex flex-col justify-between">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="text-sm text-slate-500 mb-1">得分率</div>
+              <div className="text-3xl font-bold text-blue-600">
+                {percentage.toFixed(2)}%
+              </div>
+            </div>
+            <button
+              onClick={handleSave}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              <Save className="w-5 h-5" />
+              保存并生成报告
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
