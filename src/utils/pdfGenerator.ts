@@ -199,6 +199,7 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
   ` : ''}
   ` : `
   ${keyItems.length > 0 ? `
+  <h3>（一）重点工序</h3>
   <ul class="key-items">
     ${keyItems.map((item, index) => `<li>${index + 1}. ${item}</li>`).join('')}
   </ul>
