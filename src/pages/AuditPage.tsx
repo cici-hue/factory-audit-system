@@ -117,11 +117,23 @@ export default function AuditPage() {
   useEffect(() => {
     if (evalType === '整改复查' && selectedFactory) {
       const pastEvals = getEvaluationsByFactory(selectedFactory);
+      console.log('selectedFactory:', selectedFactory);
+      console.log('pastEvals:', pastEvals);
       if (pastEvals.length > 0) {
+        // 获取所有评估记录，按日期排序
         const sorted = [...pastEvals].sort((a, b) =>
           new Date(b.evalDate).getTime() - new Date(a.evalDate).getTime()
         );
-        setLastEvaluation(sorted[0]);
+        // 找到最近一次有 results 的评估记录（不限制评估类型）
+        const lastEvalWithResults = sorted.find(e => e.results && Object.keys(e.results).length > 0);
+        console.log('sorted:', sorted);
+        console.log('sorted.length:', sorted.length);
+        sorted.forEach((e, index) => {
+          console.log(`sorted[${index}].id:`, e.id, 'evalDate:', e.evalDate, 'evalType:', e.evalType, 'results keys:', Object.keys(e.results || {}).length);
+        });
+        console.log('lastEvalWithResults:', lastEvalWithResults);
+        console.log('lastEvalWithResults.results:', lastEvalWithResults?.results);
+        setLastEvaluation(lastEvalWithResults || sorted[0]);
       } else {
         setLastEvaluation(null);
       }
@@ -137,11 +149,20 @@ export default function AuditPage() {
         // 常规审核默认全选
         setSelectedModules(auditModules.map(m => m.name));
         setExpandedModules(new Set(auditModules.map(m => m.id)));
-      } else {
-        // 整改复查/随机抽查默认清空，让用户手动选择
+      } else if (evalType === '随机抽查') {
+        // 随机抽查默认清空，让用户手动选择
         setSelectedModules([]);
         setExpandedModules(new Set());
-      }
+      } else if (evalType === '整改复查') {
+         // 整改复查自动选中所有包含不合格项目的模块
+         const failedModules = auditModules
+           .filter(mod => lastFailedModuleIds.has(mod.id))
+           .map(mod => mod.name);
+         setSelectedModules(failedModules);
+         setExpandedModules(new Set(failedModules.map(name => 
+           auditModules.find(m => m.name === name)?.id || ''
+         ).filter(Boolean)));
+       }
       setOnlyShowLastFailed(false);
       clearCurrentAuditResults();
     }
@@ -180,9 +201,26 @@ export default function AuditPage() {
       modScores[mod.name] = modScore;
     });
 
+    // 如果是整改复查，使用累加式得分计算
+    let finalPercentage = (score / TOTAL_SCORE) * 100;
+    
+    if (evalType === '整改复查' && lastEvaluation) {
+      // 累加得分：上次得分 + 本次整改复查得分
+      const lastScore = (lastEvaluation.overallPercent / 100) * TOTAL_SCORE;
+      const currentRectificationScore = score;
+      const accumulatedScore = lastScore + currentRectificationScore;
+      finalPercentage = (accumulatedScore / TOTAL_SCORE) * 100;
+      console.log('整改复查累加得分计算:', {
+        lastScore,
+        currentRectificationScore,
+        accumulatedScore,
+        finalPercentage
+      });
+    }
+
     return {
       currentScore: score,
-      percentage: (score / TOTAL_SCORE) * 100,
+      percentage: finalPercentage,
       moduleScores: modScores,
     };
   }, [currentAuditResults, selectedModules]);
@@ -297,7 +335,7 @@ export default function AuditPage() {
   };
 
   // 保存评估
-  const handleSave = () => {
+  const handleSave = async () => {
     const factory = factoryList.find(f => f.id === selectedFactory);
     if (!factory) {
       toast.error('请选择工厂');
@@ -336,25 +374,28 @@ export default function AuditPage() {
 
     let savedRecord;
     if (isEditMode && editingRecord) {
-      updateEvaluation(editingRecord.id, evaluation);
-      savedRecord = { ...editingRecord, ...evaluation };
-      toast.success('评估报告已更新');
-      setEditMode(false);
-      clearCurrentAuditResults();
+      savedRecord = await updateEvaluation(editingRecord.id, evaluation);
+      if (savedRecord) {
+        toast.success('评估报告已更新');
+        setEditMode(false);
+        clearCurrentAuditResults();
+      } else {
+        toast.error('保存失败');
+        return;
+      }
     } else {
-      addEvaluation(evaluation);
-      savedRecord = {
-        ...evaluation,
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      toast.success('评估报告已保存');
-      clearCurrentAuditResults();
+      savedRecord = await addEvaluation(evaluation);
+      if (savedRecord) {
+        toast.success('评估报告已保存');
+        clearCurrentAuditResults();
+      } else {
+        toast.error('保存失败');
+        return;
+      }
     }
 
     // 生成并下载PDF
-    generatePDF(savedRecord);
+    generatePDF(savedRecord, evalType === '整改复查' ? lastEvaluation : undefined);
     toast.success('PDF报告已生成并下载');
 
     // 重置表单
@@ -380,8 +421,10 @@ export default function AuditPage() {
     if (evalType !== '整改复查' || !lastEvaluation?.results) return new Set<string>();
     const s = new Set<string>();
     Object.entries(lastEvaluation.results).forEach(([itemId, r]: any) => {
-      if (r && r.isChecked === false) s.add(itemId);
+      if (r && (r.isChecked === false || (!r.isChecked && r.details && r.details.length > 0))) s.add(itemId);
     });
+    console.log('lastFailedItemIds:', s);
+    console.log('lastFailedItemIds size:', s.size);
     return s;
   }, [evalType, lastEvaluation]);
 
@@ -397,6 +440,7 @@ export default function AuditPage() {
       });
       if (hasFail) modIds.add(mod.id);
     });
+    console.log('lastFailedModuleIds:', modIds);
     return modIds;
   }, [lastFailedItemIds]);
 
@@ -626,7 +670,6 @@ export default function AuditPage() {
                     checked={onlyShowLastFailed}
                     onChange={(e) => setOnlyShowLastFailed(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    disabled={!lastEvaluation || lastFailedItemIds.size === 0}
                   />
                   只显示上次不合格模块
                 </label>
@@ -805,7 +848,7 @@ export default function AuditPage() {
                                             关键项
                                           </span>
                                         )}
-                                        {lastStatus && (
+                                        {lastStatus && lastStatus !== '' && (
                                           <span
                                             className={`text-xs ${
                                               lastStatus.includes('合格')

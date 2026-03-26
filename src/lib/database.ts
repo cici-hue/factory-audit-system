@@ -501,6 +501,7 @@ export const evaluationService = {
 
   // 创建评估记录
   async createEvaluation(evaluation: Omit<EvaluationRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<EvaluationRecord | null> {
+    console.log('开始插入评估数据到 Supabase:', evaluation);
     const { data, error } = await supabase
       .from('evaluations')
       .insert([{
@@ -529,9 +530,12 @@ export const evaluationService = {
       .single();
 
     if (error) {
-      console.error('创建评估记录失败:', error);
+      console.error('插入评估记录失败:', error);
+      console.error('错误详情:', JSON.stringify(error, null, 2));
       return null;
     }
+
+    console.log('评估记录插入成功:', data);
 
     return {
       id: data.id,

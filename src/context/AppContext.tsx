@@ -333,25 +333,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addEvaluation = async (evaluation: Omit<EvaluationRecord, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addEvaluation = async (evaluation: Omit<EvaluationRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<EvaluationRecord | null> => {
     try {
+      console.log('开始添加评估记录:', evaluation);
       const newEvaluation = await evaluationService.createEvaluation(evaluation);
+      console.log('创建评估结果:', newEvaluation);
       if (newEvaluation) {
         setEvaluations([newEvaluation, ...evaluations]);
+        return newEvaluation;
       }
+      console.error('创建评估记录返回 null');
+      return null;
     } catch (error) {
-      console.error('添加评估记录失败:', error);
+      console.error('添加评估记录异常:', error);
+      return null;
     }
   };
 
-  const updateEvaluation = async (id: string, evaluation: Partial<EvaluationRecord>) => {
+  const updateEvaluation = async (id: string, evaluation: Partial<EvaluationRecord>): Promise<EvaluationRecord | null> => {
     try {
-      await evaluationService.updateEvaluation(id, evaluation);
-      setEvaluations(evaluations.map(e =>
-        e.id === id ? { ...e, ...evaluation, updatedAt: new Date().toISOString() } : e
-      ));
+      const success = await evaluationService.updateEvaluation(id, evaluation);
+      if (success) {
+        const updatedEvaluations = evaluations.map(e =>
+          e.id === id ? { ...e, ...evaluation, updatedAt: new Date().toISOString() } : e
+        );
+        setEvaluations(updatedEvaluations);
+        return updatedEvaluations.find(e => e.id === id) || null;
+      }
+      return null;
     } catch (error) {
       console.error('更新评估记录失败:', error);
+      return null;
     }
   };
 
