@@ -78,7 +78,36 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
 
   // 生成PDF报告
   const handleDownloadPDF = (record: EvaluationRecord) => {
-    generatePDF(record);
+    let lastEvaluation: EvaluationRecord | undefined;
+    
+    // 如果是整改复查，需要获取上次评估记录
+    if (record.evalType === '整改复查' && record.factoryId) {
+      // 获取该工厂的所有评估记录
+      const factoryEvals = evaluations.filter(e => e.factoryId === record.factoryId);
+      
+      // 按日期排序，找到记录日期之前的最近一次评估
+      const sortedEvals = [...factoryEvals].sort((a, b) => 
+        new Date(b.evalDate).getTime() - new Date(a.evalDate).getTime()
+      );
+      
+      // 找到当前记录之前的最近一次评估
+      const currentIndex = sortedEvals.findIndex(e => e.id === record.id);
+      if (currentIndex >= 0 && currentIndex < sortedEvals.length - 1) {
+        // 当前记录之后的下一个记录就是上次评估记录
+        lastEvaluation = sortedEvals[currentIndex + 1];
+      }
+      
+      console.log('历史记录PDF生成调试:', {
+        recordId: record.id,
+        recordDate: record.evalDate,
+        factoryEvalsCount: factoryEvals.length,
+        sortedEvals: sortedEvals.map(e => ({id: e.id, date: e.evalDate, type: e.evalType})),
+        currentIndex,
+        lastEvaluation: lastEvaluation ? {id: lastEvaluation.id, date: lastEvaluation.evalDate, type: lastEvaluation.evalType} : null
+      });
+    }
+    
+    generatePDF(record, lastEvaluation);
     toast.success('PDF报告已下载');
   };
 
