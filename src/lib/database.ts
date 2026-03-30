@@ -451,6 +451,7 @@ export const evaluationService = {
         overallPercent: parseFloat(record.overall_percent),
         results: record.results || {},
         comments: record.notes || '',
+        failedItemsPriority: record.failed_items_priority || undefined,
         createdAt: record.created_at,
         updatedAt: record.updated_at
       }));
@@ -494,6 +495,7 @@ export const evaluationService = {
       overallPercent: parseFloat(record.overall_percent),
       results: record.results || {},
       comments: record.notes || '',
+      failedItemsPriority: record.failed_items_priority || undefined,
       createdAt: record.created_at,
       updatedAt: record.updated_at
     }));
