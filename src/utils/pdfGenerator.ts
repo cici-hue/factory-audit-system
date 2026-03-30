@@ -274,7 +274,6 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
             ${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}
             <span class="priority-badge urgent-badge">急需</span>
           </div>
-          <div class="item-details">分值: ${item.score}分</div>
           ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
           ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
         </li>
@@ -293,7 +292,6 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
             ${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}
             <span class="priority-badge normal-badge">一般</span>
           </div>
-          <div class="item-details">分值: ${item.score}分</div>
           ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
           ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
         </li>
@@ -309,7 +307,6 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
     ${failedItems.filter(i => i.isKey).map((item, index) => `
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
-        <div class="item-details">分值: ${item.score}分</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
         ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
       </li>
@@ -323,7 +320,6 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
     ${failedItems.filter(i => !i.isKey).map((item, index) => `
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
-        <div class="item-details">分值: ${item.score}分</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
         ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
       </li>
