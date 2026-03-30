@@ -377,10 +377,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const getEvaluationsByUser = (userId: string, role: string): EvaluationRecord[] => {
-    if (role === 'admin' || role === 'sadmin') {
-      return evaluations;
-    }
-    return evaluations.filter(e => e.evaluatorId === userId);
+    // 所有用户都可以看到所有评估记录
+    return evaluations;
   };
 
   const getEvaluationsByFactory = (factoryId: number): EvaluationRecord[] => {

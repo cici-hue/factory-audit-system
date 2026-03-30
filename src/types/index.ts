@@ -24,6 +24,13 @@ export interface AuditResult {
   imagePath: string | null;
 }
 
+// 不合格项优先级
+export interface FailedItemPriority {
+  itemId: string;           // 评估项ID
+  priority: number;         // 优先级序号（1,2,3...）
+  isUrgent: boolean;        // 是否急需（前10项为true）
+}
+
 export interface EvaluationRecord {
   id: string;
   factoryId: number;
@@ -43,6 +50,8 @@ export interface EvaluationRecord {
   comments: string;
   createdAt: string;
   updatedAt: string;
+  // 不合格项优先级排序
+  failedItemsPriority?: FailedItemPriority[];
   /**
    * 数据库存储需要的字段（UI 侧通常不直接使用）
    * - result: evaluations.result (pass/fail/pending)

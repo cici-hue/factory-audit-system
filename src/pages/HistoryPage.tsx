@@ -308,20 +308,25 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                       <Download className="w-4 h-4" />
                       下载报告
                     </button>
-                    <button
-                      onClick={() => handleEdit(record)}
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg transition-colors"
-                    >
-                      <Edit className="w-4 h-4" />
-                      编辑
-                    </button>
-                    <button
-                      onClick={() => handleDelete(record.id)}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      删除
-                    </button>
+                    {/* 只有管理员或自己的记录才能编辑/删除 */}
+                    {(user?.role === 'admin' || user?.role === 'sadmin' || record.evaluatorId === user?.id) && (
+                      <>
+                        <button
+                          onClick={() => handleEdit(record)}
+                          className="flex items-center gap-2 px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                          编辑
+                        </button>
+                        <button
+                          onClick={() => handleDelete(record.id)}
+                          className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          删除
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={() => handleAISummary(record)}
                       className="flex flex-col items-center gap-1 px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors"

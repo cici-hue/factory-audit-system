@@ -1,16 +1,27 @@
 import { auditModules } from '../data/modules';
-import { EvaluationRecord } from '../types';
+import { EvaluationRecord, FailedItemPriority } from '../types';
+
+// 不合格项信息接口
+interface FailedItemInfo {
+  itemId: string;
+  moduleName: string;
+  subModuleName: string;
+  itemName: string;
+  score: number;
+  details: string[];
+  comment: string;
+  isKey: boolean;
+}
 
 // 创建打印友好的HTML内容
 function createPrintContent(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): string {
-  // 收集问题项
-  const keyItems: string[] = [];
-  const otherItems: string[] = [];
+  // 收集所有不合格项
+  const failedItems: FailedItemInfo[] = [];
   
   // 整改复查模式的对比数据
-  const improvedItems: string[] = [];
-  const remainingItems: string[] = [];
-  const newItems: string[] = [];
+  const improvedItems: FailedItemInfo[] = [];
+  const remainingItems: FailedItemInfo[] = [];
+  const newItems: FailedItemInfo[] = [];
 
   auditModules.forEach(mod => {
     if (!record.selectedModules.includes(mod.name)) return;
@@ -18,56 +29,47 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
     Object.entries(mod.subModules).forEach(([subModName, subMod]) => {
       subMod.items.forEach(item => {
         const result = record.results[item.id];
+        if (!result) return;
         
-        let itemText = `${mod.name} - ${subModName}: ${item.name}`;
+        const itemInfo: FailedItemInfo = {
+          itemId: item.id,
+          moduleName: mod.name,
+          subModuleName: subModName,
+          itemName: item.name,
+          score: item.score,
+          details: result.details || [],
+          comment: result.comment || '',
+          isKey: item.isKey
+        };
         
         // 整改复查模式的对比
         if (lastEvaluation && lastEvaluation.results) {
           const lastResult = lastEvaluation.results[item.id];
           if (lastResult && !lastResult.isChecked) {
             // 上次不合格，看这次是否整改
-            if (result && result.isChecked) {
+            if (result.isChecked) {
               // 已整改
-              improvedItems.push(`${itemText} ✅ 已整改`);
-            } else if (result && !result.isChecked) {
+              improvedItems.push(itemInfo);
+            } else {
               // 仍存在的问题
-              if (result.details && result.details.length > 0) {
-                itemText += ` (问题: ${result.details.join(', ')})`;
-              }
-              remainingItems.push(`${itemText} ❌ 仍未整改`);
+              remainingItems.push(itemInfo);
             }
-          } else if (!lastResult || lastResult.isChecked) {
+          } else if ((!lastResult || lastResult.isChecked) && !result.isChecked) {
             // 上次合格或没有记录，这次又出现问题
-            if (result && !result.isChecked) {
-              if (result.details && result.details.length > 0) {
-                itemText += ` (问题: ${result.details.join(', ')})`;
-              }
-              newItems.push(`${itemText} ⚠️ 新问题`);
-            }
+            newItems.push(itemInfo);
           }
         }
         
-        // 非整改复查模式或仅收集问题项
-        if (!lastEvaluation && result && !result.isChecked) {
-          if (result.details && result.details.length > 0) {
-            itemText += ` (问题: ${result.details.join(', ')})`;
-          }
-          if (item.comment) {
-            itemText += ` [建议: ${item.comment}]`;
-          }
-          if (result.comment) {
-            itemText += ` [评论: ${result.comment}]`;
-          }
-          
-          if (item.isKey) {
-            keyItems.push(itemText);
-          } else {
-            otherItems.push(itemText);
-          }
+        // 收集不合格项（用于优先级排序）
+        if (!result.isChecked) {
+          failedItems.push(itemInfo);
         }
       });
     });
   });
+
+  // 根据优先级排序（如果有）
+  const { urgentItems, normalItems } = sortFailedItemsByPriority(failedItems, record.failedItemsPriority);
 
   // 生成打印友好的HTML
   const html = `
@@ -123,6 +125,16 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
       font-size: 14px;
       margin: 15px 0 10px;
     }
+    .urgent-section h3 {
+      color: #dc2626;
+      border-left: 4px solid #dc2626;
+      padding-left: 10px;
+    }
+    .normal-section h3 {
+      color: #6b7280;
+      border-left: 4px solid #6b7280;
+      padding-left: 10px;
+    }
     .key-items {
       color: #d97706;
     }
@@ -133,7 +145,42 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
       margin-left: 20px;
     }
     li {
-      margin: 6px 0;
+      margin: 8px 0;
+      padding: 8px;
+      background: #fafafa;
+      border-radius: 4px;
+    }
+    .urgent-section li {
+      background: #fef2f2;
+      border-left: 3px solid #dc2626;
+    }
+    .normal-section li {
+      background: #f9fafb;
+      border-left: 3px solid #6b7280;
+    }
+    .item-header {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .item-details {
+      color: #666;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .priority-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      margin-left: 8px;
+    }
+    .urgent-badge {
+      background: #dc2626;
+      color: white;
+    }
+    .normal-badge {
+      background: #6b7280;
+      color: white;
     }
     .footer {
       margin-top: 30px;
@@ -176,21 +223,38 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
   ${improvedItems.length > 0 ? `
   <h3 style="color: #22c55e;">（一）已整改项目</h3>
   <ul>
-    ${improvedItems.map((item, index) => `<li>${index + 1}. ${item}</li>`).join('')}
+    ${improvedItems.map((item, index) => `
+      <li>
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ✅ 已整改</div>
+        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+      </li>
+    `).join('')}
   </ul>
   ` : ''}
 
   ${remainingItems.length > 0 ? `
   <h3 style="color: #ef4444;">（二）整改后仍存在的问题</h3>
   <ul>
-    ${remainingItems.map((item, index) => `<li>${index + 1}. ${item}</li>`).join('')}
+    ${remainingItems.map((item, index) => `
+      <li>
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ❌ 仍未整改</div>
+        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+      </li>
+    `).join('')}
   </ul>
   ` : ''}
 
   ${newItems.length > 0 ? `
   <h3 style="color: #ef4444;">（三）新增问题</h3>
   <ul>
-    ${newItems.map((item, index) => `<li>${index + 1}. ${item}</li>`).join('')}
+    ${newItems.map((item, index) => `
+      <li>
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ⚠️ 新问题</div>
+        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+      </li>
+    `).join('')}
   </ul>
   ` : ''}
 
@@ -198,19 +262,75 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
   <p class="no-issue">本次整改复查未发现明显变化</p>
   ` : ''}
   ` : `
-  ${keyItems.length > 0 ? `
+  ${failedItems.length > 0 && record.failedItemsPriority && record.failedItemsPriority.length > 0 ? `
+  <!-- 有优先级排序的情况 -->
+  <div class="urgent-section">
+    <h3>（一）急需整改项（前10项）</h3>
+    ${urgentItems.length > 0 ? `
+    <ul>
+      ${urgentItems.map((item, index) => `
+        <li>
+          <div class="item-header">
+            ${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}
+            <span class="priority-badge urgent-badge">急需</span>
+          </div>
+          <div class="item-details">分值: ${item.score}分</div>
+          ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+          ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+        </li>
+      `).join('')}
+    </ul>
+    ` : '<p class="no-issue">无急需整改项</p>'}
+  </div>
+
+  <div class="normal-section">
+    <h3>（二）一般整改项</h3>
+    ${normalItems.length > 0 ? `
+    <ul>
+      ${normalItems.map((item, index) => `
+        <li>
+          <div class="item-header">
+            ${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}
+            <span class="priority-badge normal-badge">一般</span>
+          </div>
+          <div class="item-details">分值: ${item.score}分</div>
+          ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+          ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+        </li>
+      `).join('')}
+    </ul>
+    ` : '<p class="no-issue">无一般整改项</p>'}
+  </div>
+  ` : `
+  <!-- 无优先级排序的情况（原有逻辑） -->
+  ${failedItems.filter(i => i.isKey).length > 0 ? `
   <h3>（一）重点工序</h3>
   <ul class="key-items">
-    ${keyItems.map((item, index) => `<li>${index + 1}. ${item}</li>`).join('')}
+    ${failedItems.filter(i => i.isKey).map((item, index) => `
+      <li>
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
+        <div class="item-details">分值: ${item.score}分</div>
+        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+      </li>
+    `).join('')}
   </ul>
   ` : `<p class="no-issue">本次评估未发现重点工序问题</p>`}
 
   <h3>（二）其他工序</h3>
-  ${otherItems.length > 0 ? `
+  ${failedItems.filter(i => !i.isKey).length > 0 ? `
   <ul>
-    ${otherItems.map((item, index) => `<li>${index + 1}. ${item}</li>`).join('')}
+    ${failedItems.filter(i => !i.isKey).map((item, index) => `
+      <li>
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
+        <div class="item-details">分值: ${item.score}分</div>
+        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+      </li>
+    `).join('')}
   </ul>
   ` : `<p class="no-issue">本次评估未发现其他工序问题</p>`}
+  `}
   `}
 
   <h2>四、评估者评论</h2>
@@ -227,6 +347,47 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
   `;
 
   return html;
+}
+
+// 根据优先级排序不合格项
+function sortFailedItemsByPriority(
+  failedItems: FailedItemInfo[],
+  priorityData?: FailedItemPriority[]
+): { urgentItems: FailedItemInfo[]; normalItems: FailedItemInfo[] } {
+  if (!priorityData || priorityData.length === 0) {
+    // 没有优先级数据，按分值排序
+    const sorted = [...failedItems].sort((a, b) => b.score - a.score);
+    return {
+      urgentItems: sorted.slice(0, 10),
+      normalItems: sorted.slice(10)
+    };
+  }
+
+  // 创建优先级映射
+  const priorityMap = new Map<string, FailedItemPriority>();
+  priorityData.forEach(p => priorityMap.set(p.itemId, p));
+
+  // 按优先级排序
+  const sorted = [...failedItems].sort((a, b) => {
+    const priorityA = priorityMap.get(a.itemId)?.priority || 999;
+    const priorityB = priorityMap.get(b.itemId)?.priority || 999;
+    return priorityA - priorityB;
+  });
+
+  // 分离急需项和一般项
+  const urgentItems: FailedItemInfo[] = [];
+  const normalItems: FailedItemInfo[] = [];
+
+  sorted.forEach(item => {
+    const priority = priorityMap.get(item.itemId);
+    if (priority && priority.isUrgent) {
+      urgentItems.push(item);
+    } else {
+      normalItems.push(item);
+    }
+  });
+
+  return { urgentItems, normalItems };
 }
 
 export function generatePDF(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): void {
@@ -251,23 +412,4 @@ export function generatePDF(record: EvaluationRecord, lastEvaluation?: Evaluatio
       printWindow.print();
     }, 500);
   };
-}
-
-export function generatePDFDownload(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): void {
-  // 生成HTML内容
-  const printContent = createPrintContent(record, lastEvaluation);
-
-  // 创建Blob并下载
-  const blob = new Blob([printContent], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `工厂评估报告_${record.factoryName}_${record.evalDate}.html`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-
-  // 提示用户
-  alert('报告已下载为HTML文件，请在浏览器中打开并使用"打印 -> 另存为PDF"功能导出为PDF');
 }

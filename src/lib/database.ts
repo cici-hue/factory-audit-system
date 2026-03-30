@@ -524,7 +524,8 @@ export const evaluationService = {
         overall_percent: evaluation.overallPercent,
         result: evaluation.result ?? 'pending',
         notes: evaluation.comments ?? '',
-        results: evaluation.results
+        results: evaluation.results,
+        failed_items_priority: evaluation.failedItemsPriority ?? null
       }])
       .select()
       .single();
@@ -558,6 +559,7 @@ export const evaluationService = {
       overallPercent: parseFloat(data.overall_percent),
       results: data.results || {},
       comments: data.notes || '',
+      failedItemsPriority: data.failed_items_priority || undefined,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
@@ -585,6 +587,7 @@ export const evaluationService = {
     if (updates.result !== undefined) supabaseUpdates.result = updates.result;
     if (updates.comments !== undefined) supabaseUpdates.notes = updates.comments;
     if (updates.results !== undefined) supabaseUpdates.results = updates.results;
+    if (updates.failedItemsPriority !== undefined) supabaseUpdates.failed_items_priority = updates.failedItemsPriority;
 
     const { error } = await supabase
       .from('evaluations')

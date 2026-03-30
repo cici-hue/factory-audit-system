@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { auditModules, TOTAL_SCORE } from '../data/modules';
-import { AuditResult, Customer } from '../types';
+import { AuditResult, Customer, FailedItemPriority } from '../types';
 import {
   CheckCircle2,
   XCircle,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
+import { PrioritySortModal } from '../components/PrioritySortModal';
 
 export default function AuditPage() {
   const {
@@ -54,6 +55,11 @@ export default function AuditPage() {
   // 整改复查相关
   const [lastEvaluation, setLastEvaluation] = useState<any>(null);
   const [onlyShowLastFailed, setOnlyShowLastFailed] = useState(false);
+
+  // 优先级排序相关
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [pendingEvaluation, setPendingEvaluation] = useState<any>(null);
+  const [failedItemsPriority, setFailedItemsPriority] = useState<FailedItemPriority[]>([]);
 
   // 初始化
   useEffect(() => {
@@ -334,6 +340,11 @@ export default function AuditPage() {
     setCurrentAuditResults(newResults);
   };
 
+  // 检查是否有不合格项
+  const hasFailedItems = useMemo(() => {
+    return Object.values(currentAuditResults).some(r => !r.isChecked);
+  }, [currentAuditResults]);
+
   // 保存评估
   const handleSave = async () => {
     const factory = factoryList.find(f => f.id === selectedFactory);
@@ -372,23 +383,48 @@ export default function AuditPage() {
       result: 'pending' as const,
     };
 
+    // 如果有不合格项，先弹出优先级排序弹窗
+    if (hasFailedItems) {
+      setPendingEvaluation(evaluation);
+      setShowPriorityModal(true);
+      return;
+    }
+
+    // 没有不合格项，直接保存
+    await saveEvaluation(evaluation, []);
+  };
+
+  // 保存评估（带优先级）
+  const saveEvaluation = async (evaluation: any, priorities: FailedItemPriority[]) => {
+    console.log('saveEvaluation 被调用:', { evaluation, priorities });
+    const evaluationWithPriority = {
+      ...evaluation,
+      failedItemsPriority: priorities.length > 0 ? priorities : undefined
+    };
+    console.log('准备保存的评估数据:', evaluationWithPriority);
+
     let savedRecord;
     if (isEditMode && editingRecord) {
-      savedRecord = await updateEvaluation(editingRecord.id, evaluation);
+      console.log('更新模式，记录ID:', editingRecord.id);
+      savedRecord = await updateEvaluation(editingRecord.id, evaluationWithPriority);
       if (savedRecord) {
         toast.success('评估报告已更新');
         setEditMode(false);
         clearCurrentAuditResults();
       } else {
+        console.error('更新评估失败');
         toast.error('保存失败');
         return;
       }
     } else {
-      savedRecord = await addEvaluation(evaluation);
+      console.log('新增模式');
+      savedRecord = await addEvaluation(evaluationWithPriority);
+      console.log('addEvaluation 返回:', savedRecord);
       if (savedRecord) {
         toast.success('评估报告已保存');
         clearCurrentAuditResults();
       } else {
+        console.error('新增评估失败');
         toast.error('保存失败');
         return;
       }
@@ -400,6 +436,28 @@ export default function AuditPage() {
 
     // 重置表单
     setComments('');
+    setFailedItemsPriority([]);
+    setPendingEvaluation(null);
+  };
+
+  // 处理优先级排序确认
+  const handlePriorityConfirm = (priorities: FailedItemPriority[]) => {
+    console.log('优先级排序确认:', priorities);
+    setFailedItemsPriority(priorities);
+    setShowPriorityModal(false);
+    if (pendingEvaluation) {
+      console.log('开始保存评估:', pendingEvaluation);
+      saveEvaluation(pendingEvaluation, priorities);
+    } else {
+      console.error('pendingEvaluation 为空');
+      toast.error('保存失败：评估数据丢失');
+    }
+  };
+
+  // 取消优先级排序
+  const handlePriorityCancel = () => {
+    setShowPriorityModal(false);
+    setPendingEvaluation(null);
   };
 
   // 取消编辑
@@ -992,6 +1050,14 @@ export default function AuditPage() {
           </div>
         </div>
       </div>
+
+      {/* 优先级排序弹窗 */}
+      <PrioritySortModal
+        isOpen={showPriorityModal}
+        onClose={handlePriorityCancel}
+        onConfirm={handlePriorityConfirm}
+        results={currentAuditResults}
+      />
     </div>
   );
 }
