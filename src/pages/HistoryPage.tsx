@@ -2,20 +2,22 @@ import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { EvaluationRecord } from '../types';
 import {
-  Search,
-  Calendar,
+  Brain,
   Building2,
-  User,
-  FileText,
-  Edit,
-  Trash2,
+  Calendar,
   ChevronDown,
   ChevronUp,
   Download,
+  Edit,
+  FileText,
   Filter,
+  Search,
+  Trash2,
+  User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
+import { generateAISummaryPDF, generateAISummary } from '../utils/aiSummaryGenerator';
 
 interface HistoryPageProps {
   onEdit: (record: EvaluationRecord) => void;
@@ -109,6 +111,30 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
     
     generatePDF(record, lastEvaluation);
     toast.success('PDF报告已下载');
+  };
+
+  // 生成AI总结报告
+  const handleAISummary = async (record: EvaluationRecord) => {
+    const toastId = toast.loading('AI正在分析评估数据，时间较长，请耐心等待...');
+    
+    try {
+      // 调用AI总结生成
+      const aiSummary = await generateAISummary(record);
+      
+      // 关闭loading toast
+      toast.dismiss(toastId);
+      
+      // 生成PDF报告
+      generateAISummaryPDF(record, aiSummary);
+      
+      toast.success('AI总结报告已生成');
+    } catch (error) {
+      console.error('AI总结生成失败:', error);
+      // 关闭loading toast
+      toast.dismiss(toastId);
+      const errorMessage = error instanceof Error ? error.message : 'AI总结生成失败，请稍后重试';
+      toast.error(`AI分析失败：${errorMessage}`);
+    }
   };
 
   // 获取得分等级颜色
@@ -295,6 +321,16 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                     >
                       <Trash2 className="w-4 h-4" />
                       删除
+                    </button>
+                    <button
+                      onClick={() => handleAISummary(record)}
+                      className="flex flex-col items-center gap-1 px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Brain className="w-4 h-4" />
+                        <span>AI总结</span>
+                      </div>
+                      <span className="text-[10px] text-purple-500/70">该内容由AI生成，请谨慎参考</span>
                     </button>
                   </div>
                 </div>

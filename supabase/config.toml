@@ -1,0 +1,12 @@
+# Supabase项目配置
+[general]
+project_id = "factory-audit-system"
+
+[auth]
+site_url = "http://localhost:3000"
+
+[api]
+graphql_path = "/graphql/v1"
+
+[functions]
+# Edge Functions配置

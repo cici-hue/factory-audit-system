@@ -1,0 +1,3 @@
+# AI总结Edge Function配置
+[functions.ai-summary]
+verify_jwt = false
