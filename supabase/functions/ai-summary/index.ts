@@ -146,59 +146,64 @@ ${JSON.stringify(failedItems, null, 2)}
 评估员备注：
 ${evaluationData.评估员备注}
 
-请严格按照以下五个独立模块生成分析报告，每个模块之间不要重复内容：
+请严格按照以下五个独立模块生成分析报告。每个模块使用【模块X】作为标题，内容必须独立不重复：
 
-【模块一】总体评估概览（约250字）
-只包含：
-- 基于总得分${totalScore}，对工厂整体水平评价（优秀/良好/一般/需改进）
-- 主要亮点（做得好的方面）
-- 主要问题类别概述（不要展开具体问题细节）
+【模块一：总体评估概览】（约300字）
+内容要求：
+- **工厂整体水平**：基于总得分${totalScore}，明确评价等级（优秀/良好/一般/需改进）
+- **主要亮点**：列举2-3个做得好的方面，用**加粗**标出关键词
+- **主要问题类别**：只概述问题类别（如"面辅料品质控制"、"生产流程管理"），不要展开具体问题细节
 
-【模块二】重点问题分析（约400字）
-只包含：
-- 针对不合格项逐条分析具体问题
-- 引用评估项原文说明问题
-- 问题的影响和后果
-- 不要包含改进建议、风险预警等内容
+【模块二：重点问题分析】（约400字）
+内容要求：
+- **逐条分析**：针对每个不合格项单独分析
+- **引用原文**：用**加粗**标出评估项名称，引用评估项原文说明问题
+- **影响后果**：说明该问题会导致什么后果
+- **禁止内容**：不要包含改进建议、风险预警、优化方向等内容
 
-【模块三】改进建议（约350字）
-只包含：
-- 针对模块二分析的问题，给出具体改进措施
-- 具体要做什么、谁来做、什么时候完成
-- 不要重复描述问题本身
+【模块三：改进建议】（约350字）
+内容要求：
+- **对应问题**：针对模块二分析的每个问题，给出1-2条具体改进措施
+- **执行细节**：用**加粗**标出负责人、时间节点等关键信息
+- **禁止内容**：不要重复描述问题本身，直接给建议
 
-【模块四】风险预警（约150字）
-只包含：
-- 如果不整改会有什么风险
-- 风险等级评估（高/中/低）
-- 不要重复问题和建议内容
+【模块四：风险预警】（约150字）
+内容要求：
+- **风险描述**：如果不整改会有什么具体风险
+- **风险等级**：用**加粗**标出风险等级（高风险/中风险/低风险）
+- **禁止内容**：不要重复问题和建议内容
 
-【模块五】优化方向（约50字）
-只包含：
-- 2-3条长期战略改进方向
-- 不要涉及具体整改措施
+【模块五：优化方向】（约50字）
+内容要求：
+- **战略方向**：2-3条长期战略改进方向
+- **禁止内容**：不要涉及具体整改措施
 
-【重要要求】
-1. 五个模块必须严格分离，内容互不重复
-2. 模块一只概述，不展开细节
-3. 模块二只分析问题，不给建议
-4. 模块三只给建议，不重复问题描述
-5. 模块四只谈风险，不涉及其他内容
-6. 模块五只谈长期方向
-7. 严格基于提供的评估数据，不要编造
-8. 总字数控制在1200字以内
+【格式要求】
+1. 每个模块标题必须使用【模块X：模块名称】格式
+2. 重要关键词、评估项名称、风险等级必须用**加粗**
+3. 五个模块内容严格独立，绝对不要重复
+4. 模块间不要互相引用（如"针对上述问题"等表述）
+5. 严格基于提供的评估数据，不要编造
 
-请确保各模块内容独立，不要交叉重复！`
+【字数控制】
+- 模块一：250-350字
+- 模块二：350-450字
+- 模块三：300-400字
+- 模块四：120-180字
+- 模块五：40-60字
+- 总计：1200-1500字
+
+请确保各模块标题格式正确，内容独立，重点部分加粗显示！`
 }
 
 // 解析AI响应
 function parseAIResponse(aiResponse: string): any {
   return {
-    overallAssessment: extractSection(aiResponse, '总体评估概览'),
-    keyIssuesAnalysis: extractSection(aiResponse, '重点问题分析'),
-    improvementSuggestions: extractSection(aiResponse, '改进建议'),
-    riskWarnings: extractSection(aiResponse, '风险预警'),
-    optimizationDirection: extractSection(aiResponse, '优化方向'),
+    overallAssessment: extractSection(aiResponse, '【模块一：总体评估概览】'),
+    keyIssuesAnalysis: extractSection(aiResponse, '【模块二：重点问题分析】'),
+    improvementSuggestions: extractSection(aiResponse, '【模块三：改进建议】'),
+    riskWarnings: extractSection(aiResponse, '【模块四：风险预警】'),
+    optimizationDirection: extractSection(aiResponse, '【模块五：优化方向】'),
     generatedAt: new Date().toISOString(),
     rawResponse: aiResponse
   }
@@ -206,60 +211,43 @@ function parseAIResponse(aiResponse: string): any {
 
 // 提取特定章节内容
 function extractSection(text: string, sectionName: string): string {
-  // 支持多种可能的分隔符
-  const sectionPatterns = [
-    `【模块】${sectionName}`,
-    `【模块一】${sectionName}`,
-    `【模块二】${sectionName}`,
-    `【模块三】${sectionName}`,
-    `【模块四】${sectionName}`,
-    `【模块五】${sectionName}`,
-    `## ${sectionName}`,
-    `**${sectionName}**`,
-    `${sectionName}`
-  ];
+  // 直接使用完整的模块标题匹配
+  const startIdx = text.indexOf(sectionName);
   
-  const nextSectionPatterns = [
-    '【模块一】',
-    '【模块二】',
-    '【模块三】',
-    '【模块四】',
-    '【模块五】',
-    '## '
-  ];
-  
-  let startIndex = -1;
-  
-  // 找到章节开始位置
-  for (const pattern of sectionPatterns) {
-    const idx = text.indexOf(pattern);
-    if (idx !== -1) {
-      startIndex = idx + pattern.length;
-      break;
-    }
-  }
-  
-  if (startIndex === -1) {
+  if (startIdx === -1) {
     return '暂无详细分析';
   }
   
-  // 找到下一个章节开始位置
-  let endIndex = text.length;
-  for (const pattern of nextSectionPatterns) {
-    const idx = text.indexOf(pattern, startIndex);
-    if (idx !== -1 && idx < endIndex) {
-      endIndex = idx;
+  // 从模块标题后开始提取
+  const contentStart = startIdx + sectionName.length;
+  
+  // 定义所有可能的下一个模块标题
+  const nextModules = [
+    '【模块一：总体评估概览】',
+    '【模块二：重点问题分析】',
+    '【模块三：改进建议】',
+    '【模块四：风险预警】',
+    '【模块五：优化方向】'
+  ];
+  
+  // 找到下一个模块的位置
+  let endIdx = text.length;
+  for (const nextModule of nextModules) {
+    const idx = text.indexOf(nextModule, contentStart);
+    if (idx !== -1 && idx < endIdx) {
+      endIdx = idx;
     }
   }
   
   // 提取内容
-  let content = text.substring(startIndex, endIndex).trim();
+  let content = text.substring(contentStart, endIdx).trim();
   
   // 清理内容
   content = content
-    .replace(/^[:：]\s*/, '')  // 去掉开头的冒号
-    .replace(/^\n+/, '')       // 去掉开头的空行
-    .replace(/\n+$/, '');      // 去掉结尾的空行
+    .replace(/^[:：]\s*/, '')      // 去掉开头的冒号
+    .replace(/^\n+/, '')           // 去掉开头的空行
+    .replace(/\n+$/, '')           // 去掉结尾的空行
+    .replace(/\(约\d+字\)/g, '');  // 去掉字数提示
   
   return content || '暂无详细分析';
 }
