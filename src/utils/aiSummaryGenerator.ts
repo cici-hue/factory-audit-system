@@ -14,8 +14,8 @@ export interface AISummaryReport {
 // 生成AI总结
 export async function generateAISummary(record: EvaluationRecord): Promise<AISummaryReport> {
   const evaluationSummary = buildEvaluationSummary(record);
-  const aiResponse = await callDeepSeekAPI(evaluationSummary);
-  return parseAIResponse(aiResponse);
+  // callDeepSeekAPI 现在直接返回解析后的 AISummaryReport
+  return callDeepSeekAPI(evaluationSummary);
 }
 
 // 导入模块定义
@@ -209,49 +209,11 @@ async function callDeepSeekAPI(evaluationSummary: string): Promise<string> {
 
   const result = await response.json();
   if (result.success) {
-    return result.data.rawResponse || 'AI分析完成';
+    // Edge Function 已经解析好了，直接返回解析后的数据
+    return result.data as AISummaryReport;
   } else {
     throw new Error(result.error || 'AI分析失败');
   }
-}
-
-// 解析AI响应
-function parseAIResponse(aiResponse: string): AISummaryReport {
-  return {
-    overallAssessment: extractSection(aiResponse, '总体评估概览'),
-    keyIssuesAnalysis: extractSection(aiResponse, '重点问题分析'),
-    improvementSuggestions: extractSection(aiResponse, '改进建议'),
-    riskWarnings: extractSection(aiResponse, '风险预警'),
-    optimizationDirection: extractSection(aiResponse, '优化方向'),
-    generatedAt: new Date().toISOString()
-  };
-}
-
-// 提取特定章节内容
-function extractSection(text: string, sectionName: string): string {
-  const lines = text.split('\n');
-  let inSection = false;
-  let sectionContent: string[] = [];
-
-  for (const line of lines) {
-    if (line.includes(sectionName)) {
-      inSection = true;
-      continue;
-    }
-
-    if (inSection) {
-      if (line.startsWith('## ') || line.includes('## 📈') || line.includes('## 🎯') ||
-          line.includes('## 💡') || line.includes('## ⚠️') || line.includes('## 🚀')) {
-        break;
-      }
-      if (line.trim()) {
-        sectionContent.push(line.trim());
-      }
-    }
-  }
-
-  const result = sectionContent.join('\n');
-  return result || '暂无详细分析';
 }
 
 // 格式化AI内容：去掉Markdown符号，加粗小标题，保持段落格式
