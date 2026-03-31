@@ -165,7 +165,7 @@ function getRectificationHistory(record: EvaluationRecord): any {
 }
 
 // 调用DeepSeek API
-async function callDeepSeekAPI(evaluationSummary: string): Promise<string> {
+async function callDeepSeekAPI(evaluationSummary: string): Promise<AISummaryReport> {
   const evaluationData = JSON.parse(evaluationSummary);
 
   // 调试：打印传给AI的数据
@@ -208,6 +208,11 @@ async function callDeepSeekAPI(evaluationSummary: string): Promise<string> {
   }
 
   const result = await response.json();
+  console.log('=== Edge Function 返回数据 ===');
+  console.log('result.success:', result.success);
+  console.log('result.data:', JSON.stringify(result.data, null, 2));
+  console.log('========================');
+  
   if (result.success) {
     // Edge Function 已经解析好了，直接返回解析后的数据
     return result.data as AISummaryReport;

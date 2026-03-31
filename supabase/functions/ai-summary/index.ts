@@ -223,7 +223,13 @@ function extractSection(text: string, sectionName: string): string {
 
   for (const line of lines) {
     // 检查是否是目标章节的标题行
-    if (line.includes(sectionName) && (line.startsWith('## ') || line.match(/^[一二三四五]、/))) {
+    // 支持格式：## 总体评估概览、一、总体评估概览、总体评估概览
+    const isSectionStart = line.includes(sectionName) && 
+                           (line.startsWith('## ') || 
+                            line.match(/^[一二三四五]、/) ||
+                            line.match(new RegExp(`^${sectionName}`)))
+    
+    if (isSectionStart) {
       inSection = true
       continue
     }
@@ -232,6 +238,7 @@ function extractSection(text: string, sectionName: string): string {
       // 检查是否是下一个章节的开始
       // 1. Markdown 格式 ## 
       // 2. 中文数字格式：一、二、三、四、五、
+      // 3. 其他章节标题
       const isNextSection = line.startsWith('## ') || 
                             line.match(/^[一二三四五]、/) ||
                             allSectionTitles.some(title => line.includes(title) && !line.includes(sectionName))
