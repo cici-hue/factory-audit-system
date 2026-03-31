@@ -363,6 +363,13 @@ export default function AuditPage() {
       return;
     }
 
+    // 验证选择供应商
+    const supplier = supplierList.find(s => s.id === selectedSupplier);
+    if (!supplier) {
+      toast.error('请选择供应商');
+      return;
+    }
+
     // 验证至少选择一个模块
     if (selectedModules.length === 0) {
       toast.error('请至少选择一个评估模块');
@@ -608,7 +615,7 @@ export default function AuditPage() {
             </div>
           </div>
           <div className="relative supplier-dropdown-container">
-            <label className="block text-sm font-medium text-slate-700 mb-1">供应商</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">供应商 <span className="text-red-500">*</span></label>
             <div className="relative">
               <button
                 type="button"
@@ -616,7 +623,7 @@ export default function AuditPage() {
                 className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left"
               >
                 <span className={selectedSupplier === null ? 'text-slate-400' : 'text-slate-700'}>
-                  {selectedSupplier === null ? '请选择供应商（可选）' : supplierList.find(s => s.id === selectedSupplier)?.name}
+                  {selectedSupplier === null ? '请选择供应商' : supplierList.find(s => s.id === selectedSupplier)?.name}
                 </span>
                 <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isSupplierDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -633,17 +640,6 @@ export default function AuditPage() {
                     />
                   </div>
                   <div className="max-h-[200px] overflow-y-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedSupplier(null);
-                        setIsSupplierDropdownOpen(false);
-                        setSupplierSearch('');
-                      }}
-                      className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 ${selectedSupplier === null ? 'bg-blue-50 text-blue-600' : 'text-slate-700'}`}
-                    >
-                      不选择供应商
-                    </button>
                     {supplierList
                       .filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
                       .map(supplier => (
