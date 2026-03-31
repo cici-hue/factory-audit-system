@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { auditModules, TOTAL_SCORE } from '../data/modules';
 import { AuditResult, Customer, FailedItemPriority } from '../types';
@@ -18,6 +18,9 @@ import {
 import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
 import { PrioritySortModal } from '../components/PrioritySortModal';
+
+// 本地存储键名
+const AUTO_SAVE_KEY = 'audit_auto_save';
 
 export default function AuditPage() {
   const {
@@ -65,6 +68,11 @@ export default function AuditPage() {
   const [pendingEvaluation, setPendingEvaluation] = useState<any>(null);
   const [failedItemsPriority, setFailedItemsPriority] = useState<FailedItemPriority[]>([]);
 
+  // 自动保存相关
+  const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
+  const [hasAutoSaveData, setHasAutoSaveData] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
   // 初始化
   useEffect(() => {
     if (isEditMode && editingRecord) {
@@ -94,16 +102,43 @@ export default function AuditPage() {
       setExpandedModules(allModules);
       setExpandedSubModules(allSubModules);
     } else {
-      clearCurrentAuditResults();
-      setSelectedModules(auditModules.map(m => m.name));
-      setExpandedModules(new Set(auditModules.map(m => m.id)));
-      auditModules.forEach(mod => {
-        Object.keys(mod.subModules).forEach(sub => {
-          expandedSubModules.add(`${mod.id}-${sub}`);
-        });
-      });
+      // 检查是否有自动保存的进度
+      const savedData = localStorage.getItem(AUTO_SAVE_KEY);
+      if (savedData) {
+        try {
+          const progressData = JSON.parse(savedData);
+          // 检查是否是当前用户的进度
+          if (!progressData.userId || progressData.userId === user?.id) {
+            setHasAutoSaveData(true);
+            if (progressData.savedAt) {
+              setLastSavedTime(new Date(progressData.savedAt));
+            }
+            // 不自动恢复，让用户选择是否恢复
+          } else {
+            // 不是当前用户的进度，清除
+            localStorage.removeItem(AUTO_SAVE_KEY);
+            resetToDefaultState();
+          }
+        } catch {
+          resetToDefaultState();
+        }
+      } else {
+        resetToDefaultState();
+      }
     }
-  }, [isEditMode, editingRecord, supplierList]);
+  }, [isEditMode, editingRecord, supplierList, user?.id]);
+
+  // 重置为默认状态
+  const resetToDefaultState = () => {
+    clearCurrentAuditResults();
+    setSelectedModules(auditModules.map(m => m.name));
+    setExpandedModules(new Set(auditModules.map(m => m.id)));
+    auditModules.forEach(mod => {
+      Object.keys(mod.subModules).forEach(sub => {
+        expandedSubModules.add(`${mod.id}-${sub}`);
+      });
+    });
+  };
 
   // 点击外部关闭下拉框
   useEffect(() => {
@@ -194,6 +229,113 @@ export default function AuditPage() {
       }
     });
   };
+
+  // 保存进度到本地存储
+  const saveProgress = useCallback(() => {
+    if (isEditMode || isRestoring) return;
+
+    const progressData = {
+      selectedFactory,
+      selectedSupplier,
+      selectedCustomers,
+      evalDate,
+      evalType,
+      orderNo,
+      styleNo,
+      productionStatus,
+      selectedModules,
+      comments,
+      currentAuditResults,
+      expandedModules: Array.from(expandedModules),
+      expandedSubModules: Array.from(expandedSubModules),
+      savedAt: new Date().toISOString(),
+      userId: user?.id,
+    };
+
+    try {
+      localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(progressData));
+      setLastSavedTime(new Date());
+      setHasAutoSaveData(true);
+      toast.success('进度已保存', { duration: 1500 });
+    } catch (error) {
+      console.error('保存进度失败:', error);
+      toast.error('保存进度失败');
+    }
+  }, [
+    selectedFactory,
+    selectedSupplier,
+    selectedCustomers,
+    evalDate,
+    evalType,
+    orderNo,
+    styleNo,
+    productionStatus,
+    selectedModules,
+    comments,
+    currentAuditResults,
+    expandedModules,
+    expandedSubModules,
+    user?.id,
+    isEditMode,
+    isRestoring,
+  ]);
+
+  // 恢复进度
+  const restoreProgress = useCallback(() => {
+    try {
+      const savedData = localStorage.getItem(AUTO_SAVE_KEY);
+      if (!savedData) return false;
+
+      const progressData = JSON.parse(savedData);
+
+      // 检查是否是当前用户的进度
+      if (progressData.userId && progressData.userId !== user?.id) {
+        return false;
+      }
+
+      setIsRestoring(true);
+
+      // 恢复所有状态
+      if (progressData.selectedFactory !== undefined) setSelectedFactory(progressData.selectedFactory);
+      if (progressData.selectedSupplier !== undefined) setSelectedSupplier(progressData.selectedSupplier);
+      if (progressData.selectedCustomers !== undefined) setSelectedCustomers(progressData.selectedCustomers);
+      if (progressData.evalDate) setEvalDate(progressData.evalDate);
+      if (progressData.evalType) setEvalType(progressData.evalType);
+      if (progressData.orderNo !== undefined) setOrderNo(progressData.orderNo);
+      if (progressData.styleNo !== undefined) setStyleNo(progressData.styleNo);
+      if (progressData.productionStatus !== undefined) setProductionStatus(progressData.productionStatus);
+      if (progressData.selectedModules) setSelectedModules(progressData.selectedModules);
+      if (progressData.comments !== undefined) setComments(progressData.comments);
+      if (progressData.currentAuditResults) setCurrentAuditResults(progressData.currentAuditResults);
+      if (progressData.expandedModules) setExpandedModules(new Set(progressData.expandedModules));
+      if (progressData.expandedSubModules) setExpandedSubModules(new Set(progressData.expandedSubModules));
+
+      if (progressData.savedAt) {
+        setLastSavedTime(new Date(progressData.savedAt));
+      }
+
+      setHasAutoSaveData(true);
+      setIsRestoring(false);
+
+      toast.success('已恢复上次评估进度');
+      return true;
+    } catch (error) {
+      console.error('恢复进度失败:', error);
+      setIsRestoring(false);
+      return false;
+    }
+  }, [user?.id, setCurrentAuditResults]);
+
+  // 清除保存的进度
+  const clearSavedProgress = useCallback(() => {
+    try {
+      localStorage.removeItem(AUTO_SAVE_KEY);
+      setLastSavedTime(null);
+      setHasAutoSaveData(false);
+    } catch (error) {
+      console.error('清除进度失败:', error);
+    }
+  }, []);
 
   // 计算当前得分
   const { currentScore, percentage, moduleScores } = useMemo(() => {
@@ -455,6 +597,19 @@ export default function AuditPage() {
     setComments('');
     setFailedItemsPriority([]);
     setPendingEvaluation(null);
+
+    // 清除自动保存的进度
+    clearSavedProgress();
+
+    // 重置基础信息
+    setSelectedFactory(null);
+    setSelectedSupplier(null);
+    setSelectedCustomers([]);
+    setOrderNo('');
+    setStyleNo('');
+    setProductionStatus('');
+    setEvalDate(new Date().toISOString().split('T')[0]);
+    setEvalType('常规审核');
   };
 
   // 处理优先级排序确认
@@ -557,6 +712,43 @@ export default function AuditPage() {
           >
             取消编辑
           </button>
+        </div>
+      )}
+
+      {/* 恢复进度提示 */}
+      {!isEditMode && hasAutoSaveData && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-blue-800">
+            <Save className="w-5 h-5" />
+            <span>
+              检测到未完成的评估进度
+              {lastSavedTime && (
+                <span className="text-blue-600 ml-1">
+                  (上次保存：{lastSavedTime.toLocaleString()})
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                localStorage.removeItem(AUTO_SAVE_KEY);
+                setHasAutoSaveData(false);
+                setLastSavedTime(null);
+                resetToDefaultState();
+                toast.success('已清除保存的进度');
+              }}
+              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 rounded-lg transition-colors"
+            >
+              放弃进度
+            </button>
+            <button
+              onClick={restoreProgress}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              恢复进度
+            </button>
+          </div>
         </div>
       )}
 
@@ -870,7 +1062,7 @@ export default function AuditPage() {
 
       {/* 操作按钮 */}
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={handleSelectAll}
             className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
@@ -883,6 +1075,24 @@ export default function AuditPage() {
           >
             清空
           </button>
+          {!isEditMode && (
+            <>
+              <div className="w-px h-6 bg-slate-300 mx-2" />
+              <button
+                onClick={saveProgress}
+                disabled={isRestoring}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                保存进度
+              </button>
+              {lastSavedTime && (
+                <span className="text-sm text-slate-500 ml-2">
+                  上次保存：{lastSavedTime.toLocaleTimeString()}
+                </span>
+              )}
+            </>
+          )}
         </div>
         <div className="text-lg font-semibold">
           总得分率：<span className="text-blue-600">{percentage.toFixed(2)}%</span>
