@@ -202,17 +202,34 @@ function extractSection(text: string, sectionName: string): string {
   let inSection = false
   let sectionContent: string[] = []
 
+  // 定义所有可能的章节标题（用于识别下一个章节的开始）
+  const allSectionTitles = [
+    '总体评估概览',
+    '重点问题分析',
+    '改进建议',
+    '风险预警',
+    '优化方向'
+  ]
+
   for (const line of lines) {
-    if (line.includes(sectionName)) {
+    // 检查是否是目标章节的标题行
+    if (line.includes(sectionName) && (line.startsWith('## ') || line.match(/^[一二三四五]、/))) {
       inSection = true
       continue
     }
 
     if (inSection) {
-      if (line.startsWith('## ') || line.includes('## 📈') || line.includes('## 🎯') ||
-          line.includes('## 💡') || line.includes('## ⚠️') || line.includes('## 🚀')) {
+      // 检查是否是下一个章节的开始
+      // 1. Markdown 格式 ## 
+      // 2. 中文数字格式：一、二、三、四、五、
+      const isNextSection = line.startsWith('## ') || 
+                            line.match(/^[一二三四五]、/) ||
+                            allSectionTitles.some(title => line.includes(title) && !line.includes(sectionName))
+      
+      if (isNextSection) {
         break
       }
+      
       if (line.trim()) {
         sectionContent.push(line.trim())
       }
