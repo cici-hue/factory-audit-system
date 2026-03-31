@@ -37,10 +37,14 @@ export default function AuditPage() {
   } = useApp();
 
   // 表单状态
-  const [selectedFactory, setSelectedFactory] = useState<number>(factoryList[0]?.id || 0);
+  const [selectedFactory, setSelectedFactory] = useState<number | null>(null);
+  const [factorySearch, setFactorySearch] = useState('');
+  const [isFactoryDropdownOpen, setIsFactoryDropdownOpen] = useState(false);
   const [evalDate, setEvalDate] = useState(new Date().toISOString().split('T')[0]);
   const [evalType, setEvalType] = useState<'常规审核' | '整改复查' | '随机抽查'>('常规审核');
-  const [selectedSupplier, setSelectedSupplier] = useState<number>(supplierList[0]?.id || 0);
+  const [selectedSupplier, setSelectedSupplier] = useState<number | null>(null);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
   const [selectedCustomers, setSelectedCustomers] = useState<number[]>([]);
   const [orderNo, setOrderNo] = useState('');
   const [styleNo, setStyleNo] = useState('');
@@ -67,7 +71,7 @@ export default function AuditPage() {
       setSelectedFactory(editingRecord.factoryId);
       setEvalDate(editingRecord.evalDate);
       setEvalType(editingRecord.evalType);
-      setSelectedSupplier(editingRecord.supplierId || supplierList[0]?.id || 0);
+      setSelectedSupplier(editingRecord.supplierId || null);
       setSelectedCustomers(editingRecord.customerId ? [editingRecord.customerId] : []);
       setOrderNo(editingRecord.orderNo || '');
       setStyleNo(editingRecord.styleNo || '');
@@ -101,23 +105,29 @@ export default function AuditPage() {
     }
   }, [isEditMode, editingRecord, supplierList]);
 
-  // 点击外部关闭客户下拉框
+  // 点击外部关闭下拉框
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest('.customer-dropdown-container')) {
         setIsCustomerDropdownOpen(false);
       }
+      if (!target.closest('.factory-dropdown-container')) {
+        setIsFactoryDropdownOpen(false);
+      }
+      if (!target.closest('.supplier-dropdown-container')) {
+        setIsSupplierDropdownOpen(false);
+      }
     };
 
-    if (isCustomerDropdownOpen) {
+    if (isCustomerDropdownOpen || isFactoryDropdownOpen || isSupplierDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isCustomerDropdownOpen]);
+  }, [isCustomerDropdownOpen, isFactoryDropdownOpen, isSupplierDropdownOpen]);
 
   // 整改复查时获取上次评估
   useEffect(() => {
@@ -547,29 +557,116 @@ export default function AuditPage() {
       <div className="bg-white rounded-2xl shadow-sm border p-6">
         <h2 className="text-lg font-semibold mb-4">欢迎回来，评估员！</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">评估工厂</label>
-            <select
-              value={selectedFactory}
-              onChange={(e) => setSelectedFactory(Number(e.target.value))}
-              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {factoryList.map(factory => (
-                <option key={factory.id} value={factory.id}>{factory.name}</option>
-              ))}
-            </select>
+          <div className="relative factory-dropdown-container">
+            <label className="block text-sm font-medium text-slate-700 mb-1">评估工厂 <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsFactoryDropdownOpen(!isFactoryDropdownOpen)}
+                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left"
+              >
+                <span className={selectedFactory === null ? 'text-slate-400' : 'text-slate-700'}>
+                  {selectedFactory === null ? '请选择工厂' : factoryList.find(f => f.id === selectedFactory)?.name}
+                </span>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isFactoryDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isFactoryDropdownOpen && (
+                <div className="absolute z-50 w-full mt-2 bg-white border rounded-xl shadow-lg max-h-[300px] overflow-hidden">
+                  <div className="p-2 border-b">
+                    <input
+                      type="text"
+                      placeholder="搜索工厂..."
+                      value={factorySearch}
+                      onChange={(e) => setFactorySearch(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {factoryList
+                      .filter(f => f.name.toLowerCase().includes(factorySearch.toLowerCase()))
+                      .map(factory => (
+                        <button
+                          key={factory.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedFactory(factory.id);
+                            setIsFactoryDropdownOpen(false);
+                            setFactorySearch('');
+                          }}
+                          className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 ${selectedFactory === factory.id ? 'bg-blue-50 text-blue-600' : 'text-slate-700'}`}
+                        >
+                          {factory.name}
+                        </button>
+                      ))}
+                    {factoryList.filter(f => f.name.toLowerCase().includes(factorySearch.toLowerCase())).length === 0 && (
+                      <div className="px-4 py-3 text-sm text-slate-400 text-center">未找到匹配的工厂</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div>
+          <div className="relative supplier-dropdown-container">
             <label className="block text-sm font-medium text-slate-700 mb-1">供应商</label>
-            <select
-              value={selectedSupplier}
-              onChange={(e) => setSelectedSupplier(Number(e.target.value))}
-              className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {supplierList.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsSupplierDropdownOpen(!isSupplierDropdownOpen)}
+                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left"
+              >
+                <span className={selectedSupplier === null ? 'text-slate-400' : 'text-slate-700'}>
+                  {selectedSupplier === null ? '请选择供应商（可选）' : supplierList.find(s => s.id === selectedSupplier)?.name}
+                </span>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isSupplierDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isSupplierDropdownOpen && (
+                <div className="absolute z-50 w-full mt-2 bg-white border rounded-xl shadow-lg max-h-[300px] overflow-hidden">
+                  <div className="p-2 border-b">
+                    <input
+                      type="text"
+                      placeholder="搜索供应商..."
+                      value={supplierSearch}
+                      onChange={(e) => setSupplierSearch(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSupplier(null);
+                        setIsSupplierDropdownOpen(false);
+                        setSupplierSearch('');
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 ${selectedSupplier === null ? 'bg-blue-50 text-blue-600' : 'text-slate-700'}`}
+                    >
+                      不选择供应商
+                    </button>
+                    {supplierList
+                      .filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                      .map(supplier => (
+                        <button
+                          key={supplier.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSupplier(supplier.id);
+                            setIsSupplierDropdownOpen(false);
+                            setSupplierSearch('');
+                          }}
+                          className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 ${selectedSupplier === supplier.id ? 'bg-blue-50 text-blue-600' : 'text-slate-700'}`}
+                        >
+                          {supplier.name}
+                        </button>
+                      ))}
+                    {supplierList.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
+                      <div className="px-4 py-3 text-sm text-slate-400 text-center">未找到匹配的供应商</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="customer-dropdown-container">
             <label className="block text-sm font-medium text-slate-700 mb-2">客户</label>
