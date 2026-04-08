@@ -182,7 +182,7 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
                   </div>
                   <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
                     <span>分值: {item.item.score}分</span>
-                    {item.result.details.length > 0 && (
+                    {item.result.details && item.result.details.length > 0 && (
                       <span className="truncate">
                         详情: {item.result.details.join(', ')}
                       </span>

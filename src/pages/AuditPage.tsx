@@ -1229,18 +1229,19 @@ export default function AuditPage() {
                                             <label
                                               key={detail}
                                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
-                                                result.details.includes(detail)
+                                                (result.details || []).includes(detail)
                                                   ? 'bg-red-100 text-red-700 border border-red-200'
                                                   : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                                               }`}
                                             >
                                               <input
                                                 type="checkbox"
-                                                checked={result.details.includes(detail)}
+                                                checked={(result.details || []).includes(detail)}
                                                 onChange={(e) => {
+                                                  const currentDetails = result.details || [];
                                                   const newDetails = e.target.checked
-                                                    ? [...result.details, detail]
-                                                    : result.details.filter((d) => d !== detail);
+                                                    ? [...currentDetails, detail]
+                                                    : currentDetails.filter((d) => d !== detail);
                                                   handleDetailsChange(item.id, newDetails);
                                                 }}
                                                 className="hidden"
