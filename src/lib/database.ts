@@ -1,5 +1,5 @@
 import { supabase, supabaseUrl } from './supabase';
-import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer } from '../types';
+import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer, AuditDraft } from '../types';
 
 type DbEvalType = 'initial' | 'followup' | 'random';
 type UiEvalType = EvaluationRecord['evalType'];
@@ -617,5 +617,166 @@ export const evaluationService = {
     }
 
     return true;
+  }
+};
+
+// 评估草稿服务
+export const draftService = {
+  // 获取用户的草稿
+  async getDraft(userId: string): Promise<AuditDraft | null> {
+    try {
+      const { data, error } = await supabase
+        .from('audit_drafts')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // 没有找到记录
+          return null;
+        }
+        console.error('获取草稿失败:', error);
+        throw error;
+      }
+
+      return {
+        id: data.id,
+        userId: data.user_id,
+        selectedFactory: data.selected_factory,
+        selectedSupplier: data.selected_supplier,
+        selectedCustomers: data.selected_customers || [],
+        evalDate: data.eval_date,
+        evalType: fromDbEvalType(data.eval_type),
+        orderNo: data.order_no || '',
+        styleNo: data.style_no || '',
+        productionStatus: data.production_status || '',
+        selectedModules: data.selected_modules || [],
+        comments: data.comments || '',
+        currentAuditResults: data.current_audit_results || {},
+        expandedModules: data.expanded_modules || [],
+        expandedSubModules: data.expanded_sub_modules || [],
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+    } catch (error) {
+      console.error('获取草稿异常:', error);
+      return null;
+    }
+  },
+
+  // 保存或更新草稿
+  async saveDraft(draft: Omit<AuditDraft, 'id' | 'createdAt' | 'updatedAt'>): Promise<AuditDraft | null> {
+    try {
+      // 先检查是否已有草稿
+      const existingDraft = await this.getDraft(draft.userId);
+
+      const dbData = {
+        user_id: draft.userId,
+        selected_factory: draft.selectedFactory,
+        selected_supplier: draft.selectedSupplier,
+        selected_customers: draft.selectedCustomers,
+        eval_date: draft.evalDate,
+        eval_type: toDbEvalType(draft.evalType),
+        order_no: draft.orderNo || null,
+        style_no: draft.styleNo || null,
+        production_status: draft.productionStatus || null,
+        selected_modules: draft.selectedModules,
+        comments: draft.comments || null,
+        current_audit_results: draft.currentAuditResults,
+        expanded_modules: draft.expandedModules,
+        expanded_sub_modules: draft.expandedSubModules
+      };
+
+      if (existingDraft) {
+        // 更新现有草稿
+        const { data, error } = await supabase
+          .from('audit_drafts')
+          .update(dbData)
+          .eq('id', existingDraft.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('更新草稿失败:', error);
+          throw error;
+        }
+
+        return {
+          id: data.id,
+          userId: data.user_id,
+          selectedFactory: data.selected_factory,
+          selectedSupplier: data.selected_supplier,
+          selectedCustomers: data.selected_customers || [],
+          evalDate: data.eval_date,
+          evalType: fromDbEvalType(data.eval_type),
+          orderNo: data.order_no || '',
+          styleNo: data.style_no || '',
+          productionStatus: data.production_status || '',
+          selectedModules: data.selected_modules || [],
+          comments: data.comments || '',
+          currentAuditResults: data.current_audit_results || {},
+          expandedModules: data.expanded_modules || [],
+          expandedSubModules: data.expanded_sub_modules || [],
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        };
+      } else {
+        // 创建新草稿
+        const { data, error } = await supabase
+          .from('audit_drafts')
+          .insert([dbData])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('创建草稿失败:', error);
+          throw error;
+        }
+
+        return {
+          id: data.id,
+          userId: data.user_id,
+          selectedFactory: data.selected_factory,
+          selectedSupplier: data.selected_supplier,
+          selectedCustomers: data.selected_customers || [],
+          evalDate: data.eval_date,
+          evalType: fromDbEvalType(data.eval_type),
+          orderNo: data.order_no || '',
+          styleNo: data.style_no || '',
+          productionStatus: data.production_status || '',
+          selectedModules: data.selected_modules || [],
+          comments: data.comments || '',
+          currentAuditResults: data.current_audit_results || {},
+          expandedModules: data.expanded_modules || [],
+          expandedSubModules: data.expanded_sub_modules || [],
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        };
+      }
+    } catch (error) {
+      console.error('保存草稿异常:', error);
+      return null;
+    }
+  },
+
+  // 删除草稿
+  async deleteDraft(userId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('audit_drafts')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('删除草稿失败:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('删除草稿异常:', error);
+      return false;
+    }
   }
 };

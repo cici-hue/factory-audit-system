@@ -18,9 +18,7 @@ import {
 import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
 import { PrioritySortModal } from '../components/PrioritySortModal';
-
-// 本地存储键名
-const AUTO_SAVE_KEY = 'audit_auto_save';
+import { draftService } from '../lib/database';
 
 export default function AuditPage() {
   const {
@@ -102,29 +100,31 @@ export default function AuditPage() {
       setExpandedModules(allModules);
       setExpandedSubModules(allSubModules);
     } else {
-      // 检查是否有自动保存的进度
-      const savedData = localStorage.getItem(AUTO_SAVE_KEY);
-      if (savedData) {
+      // 检查数据库中是否有自动保存的进度
+      const checkDraft = async () => {
+        if (!user?.id) {
+          resetToDefaultState();
+          return;
+        }
+        
         try {
-          const progressData = JSON.parse(savedData);
-          // 检查是否是当前用户的进度
-          if (!progressData.userId || progressData.userId === user?.id) {
+          const draft = await draftService.getDraft(user.id);
+          if (draft) {
             setHasAutoSaveData(true);
-            if (progressData.savedAt) {
-              setLastSavedTime(new Date(progressData.savedAt));
+            if (draft.updatedAt) {
+              setLastSavedTime(new Date(draft.updatedAt));
             }
             // 不自动恢复，让用户选择是否恢复
           } else {
-            // 不是当前用户的进度，清除
-            localStorage.removeItem(AUTO_SAVE_KEY);
             resetToDefaultState();
           }
-        } catch {
+        } catch (error) {
+          console.error('检查草稿失败:', error);
           resetToDefaultState();
         }
-      } else {
-        resetToDefaultState();
-      }
+      };
+      
+      checkDraft();
     }
   }, [isEditMode, editingRecord, supplierList, user?.id]);
 
@@ -230,9 +230,13 @@ export default function AuditPage() {
     });
   };
 
-  // 保存进度到本地存储
-  const saveProgress = useCallback(() => {
+  // 保存进度到数据库
+  const saveProgress = useCallback(async () => {
     if (isEditMode || isRestoring) return;
+    if (!user?.id) {
+      toast.error('请先登录');
+      return;
+    }
 
     // 排除图片数据以节省存储空间（图片可能很大，是base64格式）
     const resultsWithoutImages: { [key: string]: AuditResult } = {};
@@ -244,7 +248,8 @@ export default function AuditPage() {
       };
     });
 
-    const progressData = {
+    const draftData = {
+      userId: user.id,
       selectedFactory,
       selectedSupplier,
       selectedCustomers,
@@ -258,28 +263,20 @@ export default function AuditPage() {
       currentAuditResults: resultsWithoutImages,
       expandedModules: Array.from(expandedModules),
       expandedSubModules: Array.from(expandedSubModules),
-      savedAt: new Date().toISOString(),
-      userId: user?.id,
     };
 
     try {
-      const dataStr = JSON.stringify(progressData);
-      console.log('保存进度数据大小:', dataStr.length, '字符');
-      localStorage.setItem(AUTO_SAVE_KEY, dataStr);
-      setLastSavedTime(new Date());
-      setHasAutoSaveData(true);
-      toast.success('进度已保存', { duration: 1500 });
-    } catch (error) {
-      console.error('保存进度失败:', error);
-      if (error instanceof Error) {
-        if (error.name === 'QuotaExceededError' || error.message.includes('quota')) {
-          toast.error('保存失败：存储空间不足，请尝试清除浏览器缓存或减少图片数量');
-        } else {
-          toast.error(`保存进度失败: ${error.message}`);
-        }
+      const saved = await draftService.saveDraft(draftData);
+      if (saved) {
+        setLastSavedTime(new Date());
+        setHasAutoSaveData(true);
+        toast.success('进度已保存到数据库', { duration: 1500 });
       } else {
         toast.error('保存进度失败');
       }
+    } catch (error) {
+      console.error('保存进度失败:', error);
+      toast.error('保存进度失败，请检查网络连接');
     }
   }, [
     selectedFactory,
@@ -301,37 +298,38 @@ export default function AuditPage() {
   ]);
 
   // 恢复进度
-  const restoreProgress = useCallback(() => {
+  const restoreProgress = useCallback(async () => {
+    if (!user?.id) {
+      toast.error('请先登录');
+      return false;
+    }
+
     try {
-      const savedData = localStorage.getItem(AUTO_SAVE_KEY);
-      if (!savedData) return false;
-
-      const progressData = JSON.parse(savedData);
-
-      // 检查是否是当前用户的进度
-      if (progressData.userId && progressData.userId !== user?.id) {
+      setIsRestoring(true);
+      const draft = await draftService.getDraft(user.id);
+      
+      if (!draft) {
+        setIsRestoring(false);
         return false;
       }
 
-      setIsRestoring(true);
-
       // 恢复所有状态
-      if (progressData.selectedFactory !== undefined) setSelectedFactory(progressData.selectedFactory);
-      if (progressData.selectedSupplier !== undefined) setSelectedSupplier(progressData.selectedSupplier);
-      if (progressData.selectedCustomers !== undefined) setSelectedCustomers(progressData.selectedCustomers);
-      if (progressData.evalDate) setEvalDate(progressData.evalDate);
-      if (progressData.evalType) setEvalType(progressData.evalType);
-      if (progressData.orderNo !== undefined) setOrderNo(progressData.orderNo);
-      if (progressData.styleNo !== undefined) setStyleNo(progressData.styleNo);
-      if (progressData.productionStatus !== undefined) setProductionStatus(progressData.productionStatus);
-      if (progressData.selectedModules) setSelectedModules(progressData.selectedModules);
-      if (progressData.comments !== undefined) setComments(progressData.comments);
-      if (progressData.currentAuditResults) setCurrentAuditResults(progressData.currentAuditResults);
-      if (progressData.expandedModules) setExpandedModules(new Set(progressData.expandedModules));
-      if (progressData.expandedSubModules) setExpandedSubModules(new Set(progressData.expandedSubModules));
+      if (draft.selectedFactory !== undefined) setSelectedFactory(draft.selectedFactory);
+      if (draft.selectedSupplier !== undefined) setSelectedSupplier(draft.selectedSupplier);
+      if (draft.selectedCustomers !== undefined) setSelectedCustomers(draft.selectedCustomers);
+      if (draft.evalDate) setEvalDate(draft.evalDate);
+      if (draft.evalType) setEvalType(draft.evalType);
+      if (draft.orderNo !== undefined) setOrderNo(draft.orderNo);
+      if (draft.styleNo !== undefined) setStyleNo(draft.styleNo);
+      if (draft.productionStatus !== undefined) setProductionStatus(draft.productionStatus);
+      if (draft.selectedModules) setSelectedModules(draft.selectedModules);
+      if (draft.comments !== undefined) setComments(draft.comments);
+      if (draft.currentAuditResults) setCurrentAuditResults(draft.currentAuditResults);
+      if (draft.expandedModules) setExpandedModules(new Set(draft.expandedModules));
+      if (draft.expandedSubModules) setExpandedSubModules(new Set(draft.expandedSubModules));
 
-      if (progressData.savedAt) {
-        setLastSavedTime(new Date(progressData.savedAt));
+      if (draft.updatedAt) {
+        setLastSavedTime(new Date(draft.updatedAt));
       }
 
       setHasAutoSaveData(true);
@@ -342,20 +340,23 @@ export default function AuditPage() {
     } catch (error) {
       console.error('恢复进度失败:', error);
       setIsRestoring(false);
+      toast.error('恢复进度失败，请检查网络连接');
       return false;
     }
   }, [user?.id, setCurrentAuditResults]);
 
   // 清除保存的进度
-  const clearSavedProgress = useCallback(() => {
+  const clearSavedProgress = useCallback(async () => {
+    if (!user?.id) return;
+    
     try {
-      localStorage.removeItem(AUTO_SAVE_KEY);
+      await draftService.deleteDraft(user.id);
       setLastSavedTime(null);
       setHasAutoSaveData(false);
     } catch (error) {
       console.error('清除进度失败:', error);
     }
-  }, []);
+  }, [user?.id]);
 
   // 计算当前得分
   const { currentScore, percentage, moduleScores } = useMemo(() => {

@@ -91,3 +91,24 @@ export interface Supplier {
   contact?: string;
   phone?: string;
 }
+
+// 评估草稿类型
+export interface AuditDraft {
+  id: string;
+  userId: string;
+  selectedFactory: number | null;
+  selectedSupplier: number | null;
+  selectedCustomers: number[];
+  evalDate: string;
+  evalType: '常规审核' | '整改复查' | '随机抽查';
+  orderNo: string;
+  styleNo: string;
+  productionStatus: string;
+  selectedModules: string[];
+  comments: string;
+  currentAuditResults: { [key: string]: AuditResult };
+  expandedModules: string[];
+  expandedSubModules: string[];
+  createdAt: string;
+  updatedAt: string;
+}
