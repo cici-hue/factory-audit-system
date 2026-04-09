@@ -234,6 +234,16 @@ export default function AuditPage() {
   const saveProgress = useCallback(() => {
     if (isEditMode || isRestoring) return;
 
+    // 排除图片数据以节省存储空间（图片可能很大，是base64格式）
+    const resultsWithoutImages: { [key: string]: AuditResult } = {};
+    Object.entries(currentAuditResults).forEach(([key, result]) => {
+      resultsWithoutImages[key] = {
+        isChecked: result.isChecked,
+        details: result.details || [],
+        imagePath: null, // 不保存图片
+      };
+    });
+
     const progressData = {
       selectedFactory,
       selectedSupplier,
@@ -245,7 +255,7 @@ export default function AuditPage() {
       productionStatus,
       selectedModules,
       comments,
-      currentAuditResults,
+      currentAuditResults: resultsWithoutImages,
       expandedModules: Array.from(expandedModules),
       expandedSubModules: Array.from(expandedSubModules),
       savedAt: new Date().toISOString(),
@@ -253,13 +263,23 @@ export default function AuditPage() {
     };
 
     try {
-      localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(progressData));
+      const dataStr = JSON.stringify(progressData);
+      console.log('保存进度数据大小:', dataStr.length, '字符');
+      localStorage.setItem(AUTO_SAVE_KEY, dataStr);
       setLastSavedTime(new Date());
       setHasAutoSaveData(true);
       toast.success('进度已保存', { duration: 1500 });
     } catch (error) {
       console.error('保存进度失败:', error);
-      toast.error('保存进度失败');
+      if (error instanceof Error) {
+        if (error.name === 'QuotaExceededError' || error.message.includes('quota')) {
+          toast.error('保存失败：存储空间不足，请尝试清除浏览器缓存或减少图片数量');
+        } else {
+          toast.error(`保存进度失败: ${error.message}`);
+        }
+      } else {
+        toast.error('保存进度失败');
+      }
     }
   }, [
     selectedFactory,
