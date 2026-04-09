@@ -404,17 +404,18 @@ export const customerService = {
 
 // 评估记录服务
 export const evaluationService = {
-  // 获取所有评估记录
-  async getEvaluations(): Promise<EvaluationRecord[]> {
+  // 获取所有评估记录（带重试机制）
+  async getEvaluations(retryCount = 3): Promise<EvaluationRecord[]> {
     console.log('开始获取评估记录数据...');
     console.log('Supabase实例:', !!supabase);
     console.log('Supabase URL:', supabaseUrl);
     
     try {
       console.log('开始查询evaluations表...');
+      // 只选择必要字段，避免查询过大的 results 字段
       const { data, error } = await supabase
         .from('evaluations')
-        .select('*')
+        .select('id, factory_id, factory_name, evaluator_id, evaluator_name, eval_date, eval_type, supplier_id, supplier_name, customer_id, customer_name, customer_ids, customer_names, order_no, style_no, production_status, selected_modules, overall_percent, result, notes, failed_items_priority, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       console.log('Supabase响应:', { data, error });
@@ -424,11 +425,19 @@ export const evaluationService = {
         console.error('错误代码:', error.code);
         console.error('错误消息:', error.message);
         console.error('错误提示:', error.hint);
+        
+        // 如果是超时错误且还有重试次数，则重试
+        if (error.code === '57014' && retryCount > 0) {
+          console.log(`查询超时，${retryCount}秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return this.getEvaluations(retryCount - 1);
+        }
+        
         throw new Error(`获取评估记录失败: ${error.message} (代码: ${error.code})`);
       }
 
       console.log('获取到评估记录数据:', data);
-      console.log('评估记录数据长度:', data.length);
+      console.log('评估记录数据长度:', data?.length || 0);
 
       return data.map(record => ({
         id: record.id,
@@ -504,7 +513,19 @@ export const evaluationService = {
   // 创建评估记录
   async createEvaluation(evaluation: Omit<EvaluationRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<EvaluationRecord | null> {
     console.log('开始插入评估数据到 Supabase:', evaluation);
-    const { data, error } = await supabase
+    
+    // 简化 results 数据，只保留必要字段以减少数据量
+    const simplifiedResults = evaluation.results ? Object.entries(evaluation.results).reduce((acc, [key, value]) => {
+      acc[key] = {
+        isChecked: value.isChecked,
+        details: value.details || [],
+        imagePath: value.imagePath || null
+      };
+      return acc;
+    }, {} as typeof evaluation.results) : {};
+    
+    // 先插入数据，不使用 select 以减少超时风险
+    const { error: insertError } = await supabase
       .from('evaluations')
       .insert([{
         factory_id: evaluation.factoryId,
@@ -526,17 +547,37 @@ export const evaluationService = {
         overall_percent: evaluation.overallPercent,
         result: evaluation.result ?? 'pending',
         notes: evaluation.comments ?? '',
-        results: evaluation.results,
+        results: simplifiedResults,
         failed_items_priority: evaluation.failedItemsPriority ?? null
-      }])
-      .select()
-      .single();
+      }]);
 
-    if (error) {
-      console.error('插入评估记录失败:', error);
-      console.error('错误详情:', JSON.stringify(error, null, 2));
+    if (insertError) {
+      console.error('插入评估记录失败:', insertError);
+      console.error('错误详情:', JSON.stringify(insertError, null, 2));
       return null;
     }
+
+    // 查询刚插入的记录
+    const { data: queryData, error: selectError } = await supabase
+      .from('evaluations')
+      .select('*')
+      .eq('factory_id', evaluation.factoryId)
+      .eq('eval_date', evaluation.evalDate)
+      .eq('evaluator_id', evaluation.evaluatorId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (selectError) {
+      console.error('查询评估记录失败:', selectError);
+      return null;
+    }
+
+    if (!queryData || queryData.length === 0) {
+      console.error('未找到刚插入的评估记录');
+      return null;
+    }
+
+    const data = queryData[0];
 
     console.log('评估记录插入成功:', data);
 
@@ -588,8 +629,21 @@ export const evaluationService = {
     if (updates.overallPercent !== undefined) supabaseUpdates.overall_percent = updates.overallPercent;
     if (updates.result !== undefined) supabaseUpdates.result = updates.result;
     if (updates.comments !== undefined) supabaseUpdates.notes = updates.comments;
-    if (updates.results !== undefined) supabaseUpdates.results = updates.results;
     if (updates.failedItemsPriority !== undefined) supabaseUpdates.failed_items_priority = updates.failedItemsPriority;
+    
+    // 简化 results 数据，避免 base64 图片数据导致超时
+    if (updates.results !== undefined) {
+      const simplifiedResults = Object.entries(updates.results).reduce((acc, [key, value]) => {
+        acc[key] = {
+          isChecked: value.isChecked,
+          details: value.details || [],
+          // 不保存 base64 图片数据，只保存 Storage URL 或 null
+          imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null
+        };
+        return acc;
+      }, {} as typeof updates.results);
+      supabaseUpdates.results = simplifiedResults;
+    }
 
     const { error } = await supabase
       .from('evaluations')
@@ -671,6 +725,17 @@ export const draftService = {
       // 先检查是否已有草稿
       const existingDraft = await this.getDraft(draft.userId);
 
+      // 简化 current_audit_results 数据，避免超时
+      const simplifiedResults = draft.currentAuditResults ? Object.entries(draft.currentAuditResults).reduce((acc, [key, value]) => {
+        acc[key] = {
+          isChecked: value.isChecked,
+          details: value.details || [],
+          // 不保存 base64 图片数据，只保存 Storage URL 或 null
+          imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null
+        };
+        return acc;
+      }, {} as typeof draft.currentAuditResults) : {};
+
       const dbData = {
         user_id: draft.userId,
         selected_factory: draft.selectedFactory,
@@ -683,76 +748,38 @@ export const draftService = {
         production_status: draft.productionStatus || null,
         selected_modules: draft.selectedModules,
         comments: draft.comments || null,
-        current_audit_results: draft.currentAuditResults,
+        current_audit_results: simplifiedResults,
         expanded_modules: draft.expandedModules,
         expanded_sub_modules: draft.expandedSubModules
       };
 
       if (existingDraft) {
         // 更新现有草稿
-        const { data, error } = await supabase
+        const { error: updateError } = await supabase
           .from('audit_drafts')
           .update(dbData)
-          .eq('id', existingDraft.id)
-          .select()
-          .single();
+          .eq('id', existingDraft.id);
 
-        if (error) {
-          console.error('更新草稿失败:', error);
-          throw error;
+        if (updateError) {
+          console.error('更新草稿失败:', updateError);
+          throw updateError;
         }
 
-        return {
-          id: data.id,
-          userId: data.user_id,
-          selectedFactory: data.selected_factory,
-          selectedSupplier: data.selected_supplier,
-          selectedCustomers: data.selected_customers || [],
-          evalDate: data.eval_date,
-          evalType: fromDbEvalType(data.eval_type),
-          orderNo: data.order_no || '',
-          styleNo: data.style_no || '',
-          productionStatus: data.production_status || '',
-          selectedModules: data.selected_modules || [],
-          comments: data.comments || '',
-          currentAuditResults: data.current_audit_results || {},
-          expandedModules: data.expanded_modules || [],
-          expandedSubModules: data.expanded_sub_modules || [],
-          createdAt: data.created_at,
-          updatedAt: data.updated_at
-        };
+        // 查询更新后的数据
+        return await this.getDraft(draft.userId);
       } else {
         // 创建新草稿
-        const { data, error } = await supabase
+        const { error: insertError } = await supabase
           .from('audit_drafts')
-          .insert([dbData])
-          .select()
-          .single();
+          .insert([dbData]);
 
-        if (error) {
-          console.error('创建草稿失败:', error);
-          throw error;
+        if (insertError) {
+          console.error('创建草稿失败:', insertError);
+          throw insertError;
         }
 
-        return {
-          id: data.id,
-          userId: data.user_id,
-          selectedFactory: data.selected_factory,
-          selectedSupplier: data.selected_supplier,
-          selectedCustomers: data.selected_customers || [],
-          evalDate: data.eval_date,
-          evalType: fromDbEvalType(data.eval_type),
-          orderNo: data.order_no || '',
-          styleNo: data.style_no || '',
-          productionStatus: data.production_status || '',
-          selectedModules: data.selected_modules || [],
-          comments: data.comments || '',
-          currentAuditResults: data.current_audit_results || {},
-          expandedModules: data.expanded_modules || [],
-          expandedSubModules: data.expanded_sub_modules || [],
-          createdAt: data.created_at,
-          updatedAt: data.updated_at
-        };
+        // 查询刚插入的数据
+        return await this.getDraft(draft.userId);
       }
     } catch (error) {
       console.error('保存草稿异常:', error);

@@ -29,7 +29,10 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
     Object.entries(mod.subModules).forEach(([subModName, subMod]) => {
       subMod.items.forEach(item => {
         const result = record.results[item.id];
-        if (!result) return;
+        // 如果没有 result 记录，视为未勾选（不合格）
+        const isChecked = result ? result.isChecked : false;
+        const details = result ? result.details || [] : [];
+        const comment = result ? result.comment || '' : '';
         
         const itemInfo: FailedItemInfo = {
           itemId: item.id,
@@ -37,31 +40,32 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
           subModuleName: subModName,
           itemName: item.name,
           score: item.score,
-          details: result.details || [],
-          comment: result.comment || '',
+          details: details,
+          comment: comment,
           isKey: item.isKey
         };
         
         // 整改复查模式的对比
         if (lastEvaluation && lastEvaluation.results) {
           const lastResult = lastEvaluation.results[item.id];
-          if (lastResult && !lastResult.isChecked) {
+          const lastIsChecked = lastResult ? lastResult.isChecked : true; // 上次没有记录视为合格
+          if (lastResult && !lastIsChecked) {
             // 上次不合格，看这次是否整改
-            if (result.isChecked) {
+            if (isChecked) {
               // 已整改
               improvedItems.push(itemInfo);
             } else {
               // 仍存在的问题
               remainingItems.push(itemInfo);
             }
-          } else if ((!lastResult || lastResult.isChecked) && !result.isChecked) {
+          } else if ((!lastResult || lastIsChecked) && !isChecked) {
             // 上次合格或没有记录，这次又出现问题
             newItems.push(itemInfo);
           }
         }
         
         // 收集不合格项（用于优先级排序）
-        if (!result.isChecked) {
+        if (!isChecked) {
           failedItems.push(itemInfo);
         }
       });

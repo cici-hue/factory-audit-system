@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
 import { PrioritySortModal } from '../components/PrioritySortModal';
 import { draftService } from '../lib/database';
+import { uploadTempImage, moveTempImages } from '../lib/supabase';
 
 export default function AuditPage() {
   const {
@@ -70,6 +71,9 @@ export default function AuditPage() {
   const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
   const [hasAutoSaveData, setHasAutoSaveData] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+
+  // 图片上传临时ID（用于评估保存前的图片存储）
+  const [tempEvaluationId] = useState(() => crypto.randomUUID());
 
   // 初始化
   useEffect(() => {
@@ -238,13 +242,13 @@ export default function AuditPage() {
       return;
     }
 
-    // 排除图片数据以节省存储空间（图片可能很大，是base64格式）
-    const resultsWithoutImages: { [key: string]: AuditResult } = {};
+    // 保存评估结果，包括图片数据
+    const resultsWithImages: { [key: string]: AuditResult } = {};
     Object.entries(currentAuditResults).forEach(([key, result]) => {
-      resultsWithoutImages[key] = {
+      resultsWithImages[key] = {
         isChecked: result.isChecked,
         details: result.details || [],
-        imagePath: null, // 不保存图片
+        imagePath: result.imagePath || null, // 保存图片路径
       };
     });
 
@@ -260,7 +264,7 @@ export default function AuditPage() {
       productionStatus,
       selectedModules,
       comments,
-      currentAuditResults: resultsWithoutImages,
+      currentAuditResults: resultsWithImages,
       expandedModules: Array.from(expandedModules),
       expandedSubModules: Array.from(expandedSubModules),
     };
@@ -314,16 +318,16 @@ export default function AuditPage() {
       }
 
       // 恢复所有状态
-      if (draft.selectedFactory !== undefined) setSelectedFactory(draft.selectedFactory);
-      if (draft.selectedSupplier !== undefined) setSelectedSupplier(draft.selectedSupplier);
-      if (draft.selectedCustomers !== undefined) setSelectedCustomers(draft.selectedCustomers);
+      if (draft.selectedFactory !== undefined && draft.selectedFactory !== null) setSelectedFactory(draft.selectedFactory);
+      if (draft.selectedSupplier !== undefined && draft.selectedSupplier !== null) setSelectedSupplier(draft.selectedSupplier);
+      if (draft.selectedCustomers !== undefined && draft.selectedCustomers !== null) setSelectedCustomers(draft.selectedCustomers);
       if (draft.evalDate) setEvalDate(draft.evalDate);
       if (draft.evalType) setEvalType(draft.evalType);
-      if (draft.orderNo !== undefined) setOrderNo(draft.orderNo);
-      if (draft.styleNo !== undefined) setStyleNo(draft.styleNo);
-      if (draft.productionStatus !== undefined) setProductionStatus(draft.productionStatus);
+      if (draft.orderNo !== undefined && draft.orderNo !== null) setOrderNo(draft.orderNo);
+      if (draft.styleNo !== undefined && draft.styleNo !== null) setStyleNo(draft.styleNo);
+      if (draft.productionStatus !== undefined && draft.productionStatus !== null) setProductionStatus(draft.productionStatus);
       if (draft.selectedModules) setSelectedModules(draft.selectedModules);
-      if (draft.comments !== undefined) setComments(draft.comments);
+      if (draft.comments !== undefined && draft.comments !== null) setComments(draft.comments);
       if (draft.currentAuditResults) setCurrentAuditResults(draft.currentAuditResults);
       if (draft.expandedModules) setExpandedModules(new Set(draft.expandedModules));
       if (draft.expandedSubModules) setExpandedSubModules(new Set(draft.expandedSubModules));
@@ -437,19 +441,44 @@ export default function AuditPage() {
     });
   };
 
-  // 处理图片上传（模拟）
-  const handleImageUpload = (itemId: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCurrentAuditResults({
-        ...currentAuditResults,
-        [itemId]: {
-          ...currentAuditResults[itemId],
-          imagePath: reader.result as string,
-        },
-      });
-    };
-    reader.readAsDataURL(file);
+  // 生成临时文件夹名称（工厂_评估人_日期）
+  const getTempFolderName = useCallback(() => {
+    const factory = factoryList.find(f => f.id === selectedFactory);
+    const factoryName = factory?.name || '未知工厂';
+    const evaluatorName = user?.name || user?.username || '未知用户';
+    const dateStr = evalDate || new Date().toISOString().split('T')[0];
+    return `${factoryName}_${evaluatorName}_${dateStr}`;
+  }, [selectedFactory, factoryList, user, evalDate]);
+
+  // 处理图片上传（上传到 Supabase Storage）
+  const handleImageUpload = async (itemId: string, file: File) => {
+    try {
+      // 显示上传中提示
+      toast.loading('正在上传图片...', { id: `upload-${itemId}` });
+
+      // 生成文件夹名称
+      const folderName = getTempFolderName();
+      console.log('使用文件夹名称:', folderName);
+
+      // 上传到 Storage（使用临时文件夹）
+      const imageUrl = await uploadTempImage(file, folderName, itemId);
+
+      if (imageUrl) {
+        setCurrentAuditResults({
+          ...currentAuditResults,
+          [itemId]: {
+            ...currentAuditResults[itemId],
+            imagePath: imageUrl,
+          },
+        });
+        toast.success('图片上传成功', { id: `upload-${itemId}` });
+      } else {
+        toast.error('图片上传失败', { id: `upload-${itemId}` });
+      }
+    } catch (error) {
+      console.error('上传图片失败:', error);
+      toast.error('图片上传失败', { id: `upload-${itemId}` });
+    }
   };
 
   // 删除图片
@@ -577,6 +606,15 @@ export default function AuditPage() {
   // 保存评估（带优先级）
   const saveEvaluation = async (evaluation: any, priorities: FailedItemPriority[]) => {
     console.log('saveEvaluation 被调用:', { evaluation, priorities });
+    
+    // 收集所有图片URL
+    const imageUrls: string[] = [];
+    Object.values(currentAuditResults).forEach(result => {
+      if (result.imagePath && result.imagePath.startsWith('http')) {
+        imageUrls.push(result.imagePath);
+      }
+    });
+    
     const evaluationWithPriority = {
       ...evaluation,
       failedItemsPriority: priorities.length > 0 ? priorities : undefined
@@ -607,6 +645,28 @@ export default function AuditPage() {
         console.error('新增评估失败');
         toast.error('保存失败');
         return;
+      }
+    }
+
+    // 移动临时图片到正式文件夹
+    if (imageUrls.length > 0 && savedRecord) {
+      const tempFolderName = getTempFolderName();
+      const finalFolderName = `${tempFolderName}_${savedRecord.id.substring(0, 8)}`;
+      console.log('开始移动临时图片到正式文件夹:', { tempFolderName, finalFolderName });
+      const movedUrls = await moveTempImages(tempFolderName, finalFolderName, imageUrls);
+      console.log('图片移动完成:', movedUrls);
+      
+      // 更新评估记录中的图片URL
+      if (savedRecord.results) {
+        Object.keys(savedRecord.results).forEach(key => {
+          const oldUrl = savedRecord.results[key].imagePath;
+          if (oldUrl) {
+            const newUrl = movedUrls.find(url => url.includes(key));
+            if (newUrl) {
+              savedRecord.results[key].imagePath = newUrl;
+            }
+          }
+        });
       }
     }
 
@@ -752,10 +812,8 @@ export default function AuditPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                localStorage.removeItem(AUTO_SAVE_KEY);
-                setHasAutoSaveData(false);
-                setLastSavedTime(null);
+              onClick={async () => {
+                await clearSavedProgress();
                 resetToDefaultState();
                 toast.success('已清除保存的进度');
               }}
@@ -1296,22 +1354,24 @@ export default function AuditPage() {
                                       )}
                                     </div>
 
-                                    {/* 拍照上传 */}
-                                    <div className="flex-shrink-0">
-                                      <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
-                                        <Camera className="w-4 h-4" />
-                                        <span className="text-sm">拍照</span>
-                                        <input
-                                          type="file"
-                                          accept="image/*"
-                                          className="hidden"
-                                          onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) handleImageUpload(item.id, file);
-                                          }}
-                                        />
-                                      </label>
-                                    </div>
+                                    {/* 拍照上传 - 只有不合格时才显示 */}
+                                    {!result.isChecked && (
+                                      <div className="flex-shrink-0">
+                                        <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                          <Camera className="w-4 h-4" />
+                                          <span className="text-sm">拍照</span>
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) handleImageUpload(item.id, file);
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                    )}
 
                                     {/* 图片预览 */}
                                     {result.imagePath && (
