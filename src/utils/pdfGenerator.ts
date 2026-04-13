@@ -29,6 +29,9 @@ function collectFailedItems(record: EvaluationRecord): {
   const failedItems: FailedItemInfo[] = [];
   const photoItems: PhotoItem[] = [];
 
+  console.log('collectFailedItems - record.results:', record.results);
+  console.log('collectFailedItems - record.selectedModules:', record.selectedModules);
+
   auditModules.forEach(mod => {
     if (!record.selectedModules.includes(mod.name)) return;
 
@@ -56,6 +59,7 @@ function collectFailedItems(record: EvaluationRecord): {
           
           // 收集有照片的不合格项
           if (imagePath) {
+            console.log('收集到照片:', item.id, imagePath);
             photoItems.push({
               itemId: item.id,
               priority: 0, // 稍后设置
@@ -63,6 +67,7 @@ function collectFailedItems(record: EvaluationRecord): {
               moduleName: mod.name,
               subModuleName: subModName,
               itemName: item.name,
+              score: item.score,
               details: details,
               comment: comment,
               imageUrl: imagePath
@@ -72,6 +77,9 @@ function collectFailedItems(record: EvaluationRecord): {
       });
     });
   });
+
+  console.log('collectFailedItems - 不合格项数量:', failedItems.length);
+  console.log('collectFailedItems - 照片数量:', photoItems.length);
 
   return { failedItems, photoItems };
 }
@@ -87,35 +95,43 @@ function sortByPriority(
   urgentPhotos: PhotoItem[];
   normalPhotos: PhotoItem[];
 } {
-  if (!priorityData || priorityData.length === 0) {
-    // 没有优先级数据，按分值排序
-    const sorted = [...failedItems].sort((a, b) => b.score - a.score);
-    const sortedPhotos = [...photoItems].sort((a, b) => b.score - a.score);
-    
-    return {
-      urgentItems: sorted.slice(0, 10),
-      normalItems: sorted.slice(10),
-      urgentPhotos: sortedPhotos.slice(0, 10).map((p, i) => ({ ...p, priority: i + 1, isUrgent: true })),
-      normalPhotos: sortedPhotos.slice(10).map((p, i) => ({ ...p, priority: i + 11, isUrgent: false }))
-    };
-  }
-
   // 创建优先级映射
   const priorityMap = new Map<string, FailedItemPriority>();
-  priorityData.forEach(p => priorityMap.set(p.itemId, p));
+  if (priorityData && priorityData.length > 0) {
+    priorityData.forEach(p => priorityMap.set(p.itemId, p));
+  }
 
-  // 按优先级排序不合格项
+  // 按优先级排序不合格项（有优先级的按优先级，没有优先级的按分值降序排在最后）
   const sortedItems = [...failedItems].sort((a, b) => {
-    const priorityA = priorityMap.get(a.itemId)?.priority || 999;
-    const priorityB = priorityMap.get(b.itemId)?.priority || 999;
-    return priorityA - priorityB;
+    const priorityA = priorityMap.get(a.itemId);
+    const priorityB = priorityMap.get(b.itemId);
+    
+    if (priorityA && priorityB) {
+      return priorityA.priority - priorityB.priority;
+    } else if (priorityA) {
+      return -1; // a 有优先级，排在前面
+    } else if (priorityB) {
+      return 1; // b 有优先级，排在前面
+    } else {
+      // 都没有优先级，按分值降序
+      return b.score - a.score;
+    }
   });
 
   // 按优先级排序照片
   const sortedPhotos = [...photoItems].sort((a, b) => {
-    const priorityA = priorityMap.get(a.itemId)?.priority || 999;
-    const priorityB = priorityMap.get(b.itemId)?.priority || 999;
-    return priorityA - priorityB;
+    const priorityA = priorityMap.get(a.itemId);
+    const priorityB = priorityMap.get(b.itemId);
+    
+    if (priorityA && priorityB) {
+      return priorityA.priority - priorityB.priority;
+    } else if (priorityA) {
+      return -1;
+    } else if (priorityB) {
+      return 1;
+    } else {
+      return b.score - a.score;
+    }
   });
 
   // 分离急需项和一般项
@@ -124,21 +140,42 @@ function sortByPriority(
   const urgentPhotos: PhotoItem[] = [];
   const normalPhotos: PhotoItem[] = [];
 
-  sortedItems.forEach(item => {
+  // 处理不合格项
+  sortedItems.forEach((item, index) => {
     const priority = priorityMap.get(item.itemId);
-    if (priority && priority.isUrgent) {
-      urgentItems.push(item);
+    if (priority) {
+      // 有优先级数据，按优先级分类
+      if (priority.isUrgent) {
+        urgentItems.push(item);
+      } else {
+        normalItems.push(item);
+      }
     } else {
-      normalItems.push(item);
+      // 没有优先级数据，前10项归为急需，其余为一般
+      if (index < 10) {
+        urgentItems.push(item);
+      } else {
+        normalItems.push(item);
+      }
     }
   });
 
-  sortedPhotos.forEach(photo => {
+  // 处理照片
+  sortedPhotos.forEach((photo, index) => {
     const priority = priorityMap.get(photo.itemId);
     if (priority) {
       photo.priority = priority.priority;
       photo.isUrgent = priority.isUrgent;
       if (priority.isUrgent) {
+        urgentPhotos.push(photo);
+      } else {
+        normalPhotos.push(photo);
+      }
+    } else {
+      // 没有优先级数据，按排序后的索引分配
+      photo.priority = index + 1;
+      photo.isUrgent = index < 10;
+      if (index < 10) {
         urgentPhotos.push(photo);
       } else {
         normalPhotos.push(photo);

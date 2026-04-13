@@ -10,6 +10,7 @@ export interface PhotoItem {
   moduleName: string;
   subModuleName: string;
   itemName: string;
+  score: number;
   details: string[];
   comment: string;
   imageUrl: string;

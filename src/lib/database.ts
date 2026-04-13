@@ -412,10 +412,10 @@ export const evaluationService = {
     
     try {
       console.log('开始查询evaluations表...');
-      // 只选择必要字段，避免查询过大的 results 字段
+      // 选择所有必要字段，包括 results
       const { data, error } = await supabase
         .from('evaluations')
-        .select('id, factory_id, factory_name, evaluator_id, evaluator_name, eval_date, eval_type, supplier_id, supplier_name, customer_id, customer_name, customer_ids, customer_names, order_no, style_no, production_status, selected_modules, overall_percent, result, notes, failed_items_priority, created_at, updated_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
       console.log('Supabase响应:', { data, error });
