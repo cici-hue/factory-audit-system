@@ -79,7 +79,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
   };
 
   // 生成PDF报告
-  const handleDownloadPDF = (record: EvaluationRecord) => {
+  const handleDownloadPDF = async (record: EvaluationRecord) => {
     let lastEvaluation: EvaluationRecord | undefined;
     
     // 如果是整改复查，需要获取上次评估记录
@@ -109,7 +109,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
       });
     }
     
-    generatePDF(record, lastEvaluation);
+    await generatePDF(record, lastEvaluation);
     toast.success('PDF报告已下载');
   };
 

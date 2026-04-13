@@ -1,5 +1,13 @@
 import { auditModules } from '../data/modules';
 import { EvaluationRecord, FailedItemPriority } from '../types';
+import { 
+  PhotoItem, 
+  processPhotosBatch, 
+  limitPhotos,
+  createLoadingHTML,
+  updateLoadingProgress,
+  hideLoading
+} from './pdfImageUtils';
 
 // 不合格项信息接口
 interface FailedItemInfo {
@@ -13,15 +21,13 @@ interface FailedItemInfo {
   isKey: boolean;
 }
 
-// 创建打印友好的HTML内容
-function createPrintContent(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): string {
-  // 收集所有不合格项
+// 收集不合格项和照片信息
+function collectFailedItems(record: EvaluationRecord): {
+  failedItems: FailedItemInfo[];
+  photoItems: PhotoItem[];
+} {
   const failedItems: FailedItemInfo[] = [];
-  
-  // 整改复查模式的对比数据
-  const improvedItems: FailedItemInfo[] = [];
-  const remainingItems: FailedItemInfo[] = [];
-  const newItems: FailedItemInfo[] = [];
+  const photoItems: PhotoItem[] = [];
 
   auditModules.forEach(mod => {
     if (!record.selectedModules.includes(mod.name)) return;
@@ -29,10 +35,10 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
     Object.entries(mod.subModules).forEach(([subModName, subMod]) => {
       subMod.items.forEach(item => {
         const result = record.results[item.id];
-        // 如果没有 result 记录，视为未勾选（不合格）
         const isChecked = result ? result.isChecked : false;
         const details = result ? result.details || [] : [];
         const comment = result ? result.comment || '' : '';
+        const imagePath = result ? result.imagePath || null : null;
         
         const itemInfo: FailedItemInfo = {
           itemId: item.id,
@@ -45,35 +51,252 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
           isKey: item.isKey
         };
         
-        // 整改复查模式的对比
-        if (lastEvaluation && lastEvaluation.results) {
-          const lastResult = lastEvaluation.results[item.id];
-          const lastIsChecked = lastResult ? lastResult.isChecked : true; // 上次没有记录视为合格
-          if (lastResult && !lastIsChecked) {
-            // 上次不合格，看这次是否整改
-            if (isChecked) {
-              // 已整改
-              improvedItems.push(itemInfo);
-            } else {
-              // 仍存在的问题
-              remainingItems.push(itemInfo);
-            }
-          } else if ((!lastResult || lastIsChecked) && !isChecked) {
-            // 上次合格或没有记录，这次又出现问题
-            newItems.push(itemInfo);
-          }
-        }
-        
-        // 收集不合格项（用于优先级排序）
         if (!isChecked) {
           failedItems.push(itemInfo);
+          
+          // 收集有照片的不合格项
+          if (imagePath) {
+            photoItems.push({
+              itemId: item.id,
+              priority: 0, // 稍后设置
+              isUrgent: false, // 稍后设置
+              moduleName: mod.name,
+              subModuleName: subModName,
+              itemName: item.name,
+              details: details,
+              comment: comment,
+              imageUrl: imagePath
+            });
+          }
         }
       });
     });
   });
 
-  // 根据优先级排序（如果有）
-  const { urgentItems, normalItems } = sortFailedItemsByPriority(failedItems, record.failedItemsPriority);
+  return { failedItems, photoItems };
+}
+
+// 根据优先级排序不合格项和照片
+function sortByPriority(
+  failedItems: FailedItemInfo[],
+  photoItems: PhotoItem[],
+  priorityData?: FailedItemPriority[]
+): {
+  urgentItems: FailedItemInfo[];
+  normalItems: FailedItemInfo[];
+  urgentPhotos: PhotoItem[];
+  normalPhotos: PhotoItem[];
+} {
+  if (!priorityData || priorityData.length === 0) {
+    // 没有优先级数据，按分值排序
+    const sorted = [...failedItems].sort((a, b) => b.score - a.score);
+    const sortedPhotos = [...photoItems].sort((a, b) => b.score - a.score);
+    
+    return {
+      urgentItems: sorted.slice(0, 10),
+      normalItems: sorted.slice(10),
+      urgentPhotos: sortedPhotos.slice(0, 10).map((p, i) => ({ ...p, priority: i + 1, isUrgent: true })),
+      normalPhotos: sortedPhotos.slice(10).map((p, i) => ({ ...p, priority: i + 11, isUrgent: false }))
+    };
+  }
+
+  // 创建优先级映射
+  const priorityMap = new Map<string, FailedItemPriority>();
+  priorityData.forEach(p => priorityMap.set(p.itemId, p));
+
+  // 按优先级排序不合格项
+  const sortedItems = [...failedItems].sort((a, b) => {
+    const priorityA = priorityMap.get(a.itemId)?.priority || 999;
+    const priorityB = priorityMap.get(b.itemId)?.priority || 999;
+    return priorityA - priorityB;
+  });
+
+  // 按优先级排序照片
+  const sortedPhotos = [...photoItems].sort((a, b) => {
+    const priorityA = priorityMap.get(a.itemId)?.priority || 999;
+    const priorityB = priorityMap.get(b.itemId)?.priority || 999;
+    return priorityA - priorityB;
+  });
+
+  // 分离急需项和一般项
+  const urgentItems: FailedItemInfo[] = [];
+  const normalItems: FailedItemInfo[] = [];
+  const urgentPhotos: PhotoItem[] = [];
+  const normalPhotos: PhotoItem[] = [];
+
+  sortedItems.forEach(item => {
+    const priority = priorityMap.get(item.itemId);
+    if (priority && priority.isUrgent) {
+      urgentItems.push(item);
+    } else {
+      normalItems.push(item);
+    }
+  });
+
+  sortedPhotos.forEach(photo => {
+    const priority = priorityMap.get(photo.itemId);
+    if (priority) {
+      photo.priority = priority.priority;
+      photo.isUrgent = priority.isUrgent;
+      if (priority.isUrgent) {
+        urgentPhotos.push(photo);
+      } else {
+        normalPhotos.push(photo);
+      }
+    }
+  });
+
+  return { urgentItems, normalItems, urgentPhotos, normalPhotos };
+}
+
+// 生成照片模块 HTML
+function generatePhotoSectionHTML(
+  urgentPhotos: PhotoItem[],
+  normalPhotos: PhotoItem[],
+  hasMore: boolean
+): string {
+  if (urgentPhotos.length === 0 && normalPhotos.length === 0) {
+    return `
+      <h2>五、现场照片</h2>
+      <p style="color: #999; font-style: italic; padding: 20px; text-align: center;">
+        未上传现场照片
+      </p>
+    `;
+  }
+
+  const generatePhotoCard = (photo: PhotoItem): string => {
+    const imageSrc = photo.imageBase64 || photo.imageUrl;
+    const badgeClass = photo.isUrgent ? 'urgent' : 'normal';
+    
+    return `
+      <div class="photo-card">
+        <div class="photo-index ${badgeClass}">${photo.priority}</div>
+        <img src="${imageSrc}" alt="现场照片" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="photo-error" style="display: none; height: 180px; align-items: center; justify-content: center; background: #f3f4f6; color: #9ca3af; font-size: 12px;">
+          照片加载失败
+        </div>
+        <div class="photo-info">
+          <div class="photo-location">${photo.moduleName} - ${photo.subModuleName}</div>
+          <div class="photo-desc">${photo.itemName}</div>
+          ${photo.details.length > 0 ? `<div class="photo-detail">问题: ${photo.details.join(', ')}</div>` : ''}
+          ${photo.comment ? `<div class="photo-comment">备注: ${photo.comment}</div>` : ''}
+        </div>
+      </div>
+    `;
+  };
+
+  return `
+    <h2>五、现场照片</h2>
+    
+    ${urgentPhotos.length > 0 ? `
+    <div class="photo-section urgent-photos">
+      <h3>（一）急需整改项现场照片</h3>
+      <div class="photo-grid">
+        ${urgentPhotos.map(generatePhotoCard).join('')}
+      </div>
+    </div>
+    ` : ''}
+    
+    ${normalPhotos.length > 0 ? `
+    <div class="photo-section normal-photos">
+      <h3>${urgentPhotos.length > 0 ? '（二）' : '（一）'}一般整改项现场照片</h3>
+      <div class="photo-grid">
+        ${normalPhotos.map(generatePhotoCard).join('')}
+      </div>
+    </div>
+    ` : ''}
+    
+    ${hasMore ? `
+    <p style="color: #666; font-size: 11px; text-align: center; margin-top: 20px; padding: 10px; background: #f9fafb; border-radius: 4px;">
+      照片数量较多，仅展示前 50 张，更多照片请登录系统查看
+    </p>
+    ` : ''}
+  `;
+}
+
+// 创建打印友好的HTML内容
+async function createPrintContent(
+  record: EvaluationRecord, 
+  lastEvaluation?: EvaluationRecord
+): Promise<string> {
+  // 收集不合格项和照片
+  const { failedItems, photoItems } = collectFailedItems(record);
+  
+  // 根据优先级排序
+  const { urgentItems, normalItems, urgentPhotos, normalPhotos } = sortByPriority(
+    failedItems, 
+    photoItems, 
+    record.failedItemsPriority
+  );
+
+  // 限制照片数量
+  const allPhotos = [...urgentPhotos, ...normalPhotos];
+  const { photos: limitedPhotos, hasMore } = limitPhotos(allPhotos, 50);
+  
+  // 重新分组
+  const finalUrgentPhotos = limitedPhotos.filter(p => p.isUrgent);
+  const finalNormalPhotos = limitedPhotos.filter(p => !p.isUrgent);
+
+  // 处理照片（下载并压缩）
+  let processedUrgentPhotos = finalUrgentPhotos;
+  let processedNormalPhotos = finalNormalPhotos;
+  
+  if (limitedPhotos.length > 0) {
+    console.log(`开始处理 ${limitedPhotos.length} 张照片...`);
+    const processed = await processPhotosBatch(limitedPhotos, 3, (completed, total) => {
+      console.log(`照片处理进度: ${completed}/${total}`);
+    });
+    processedUrgentPhotos = processed.filter(p => p.isUrgent);
+    processedNormalPhotos = processed.filter(p => !p.isUrgent);
+    console.log('照片处理完成');
+  }
+
+  // 整改复查模式的对比数据
+  const improvedItems: FailedItemInfo[] = [];
+  const remainingItems: FailedItemInfo[] = [];
+  const newItems: FailedItemInfo[] = [];
+
+  if (lastEvaluation && lastEvaluation.results) {
+    auditModules.forEach(mod => {
+      if (!record.selectedModules.includes(mod.name)) return;
+      Object.entries(mod.subModules).forEach(([subModName, subMod]) => {
+        subMod.items.forEach(item => {
+          const result = record.results[item.id];
+          const isChecked = result ? result.isChecked : false;
+          const lastResult = lastEvaluation.results[item.id];
+          const lastIsChecked = lastResult ? lastResult.isChecked : true;
+          
+          const itemInfo: FailedItemInfo = {
+            itemId: item.id,
+            moduleName: mod.name,
+            subModuleName: subModName,
+            itemName: item.name,
+            score: item.score,
+            details: result ? result.details || [] : [],
+            comment: result ? result.comment || '' : '',
+            isKey: item.isKey
+          };
+          
+          if (lastResult && !lastIsChecked) {
+            if (isChecked) {
+              improvedItems.push(itemInfo);
+            } else {
+              remainingItems.push(itemInfo);
+            }
+          } else if ((!lastResult || lastIsChecked) && !isChecked) {
+            newItems.push(itemInfo);
+          }
+        });
+      });
+    });
+  }
+
+  // 生成照片模块 HTML
+  const photoSectionHTML = generatePhotoSectionHTML(
+    processedUrgentPhotos,
+    processedNormalPhotos,
+    hasMore
+  );
 
   // 生成打印友好的HTML
   const html = `
@@ -186,6 +409,94 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
       background: #6b7280;
       color: white;
     }
+    
+    /* 照片模块样式 */
+    .photo-section {
+      margin: 20px 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .photo-section h3 {
+      margin-bottom: 15px;
+      padding-left: 10px;
+      border-left: 4px solid;
+    }
+    .urgent-photos h3 {
+      color: #dc2626;
+      border-color: #dc2626;
+    }
+    .normal-photos h3 {
+      color: #6b7280;
+      border-color: #6b7280;
+    }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin: 15px 0;
+    }
+    .photo-card {
+      position: relative;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .photo-index {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: white;
+      z-index: 1;
+    }
+    .photo-index.urgent {
+      background: #dc2626;
+    }
+    .photo-index.normal {
+      background: #6b7280;
+    }
+    .photo-card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      background: #f5f5f5;
+      display: block;
+    }
+    .photo-info {
+      padding: 12px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .photo-location {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    .photo-desc {
+      color: #555;
+      margin-bottom: 4px;
+    }
+    .photo-detail, .photo-comment {
+      color: #888;
+      font-size: 10px;
+    }
+    .photo-comment {
+      margin-top: 4px;
+      font-style: italic;
+    }
+    
     .footer {
       margin-top: 30px;
       text-align: center;
@@ -195,6 +506,21 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
     @media print {
       body {
         padding: 0;
+      }
+      .photo-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ccc;
+      }
+      .photo-section {
+        break-before: auto;
+        page-break-before: auto;
+      }
+      .photo-card img {
+        max-height: 200px;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
       }
     }
   </style>
@@ -339,6 +665,8 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
   <p>${record.comments}</p>
   ` : `<p style="color: #999;">无评论</p>`}
 
+  ${photoSectionHTML}
+
   <div class="footer">
     <p>此报告由欧图工厂审核系统自动生成</p>
   </div>
@@ -349,67 +677,90 @@ function createPrintContent(record: EvaluationRecord, lastEvaluation?: Evaluatio
   return html;
 }
 
-// 根据优先级排序不合格项
-function sortFailedItemsByPriority(
-  failedItems: FailedItemInfo[],
-  priorityData?: FailedItemPriority[]
-): { urgentItems: FailedItemInfo[]; normalItems: FailedItemInfo[] } {
-  if (!priorityData || priorityData.length === 0) {
-    // 没有优先级数据，按分值排序
-    const sorted = [...failedItems].sort((a, b) => b.score - a.score);
-    return {
-      urgentItems: sorted.slice(0, 10),
-      normalItems: sorted.slice(10)
-    };
-  }
+export async function generatePDF(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): Promise<void> {
+  // 显示加载提示
+  const loadingDiv = document.createElement('div');
+  loadingDiv.innerHTML = `
+    <div style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    ">
+      <div style="
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        text-align: center;
+        max-width: 400px;
+      ">
+        <div style="font-size: 16px; color: #374151; margin-bottom: 16px;">
+          正在生成 PDF 报告...
+        </div>
+        <div style="
+          width: 200px;
+          height: 8px;
+          background: #e5e7eb;
+          border-radius: 4px;
+          margin: 0 auto;
+          overflow: hidden;
+        ">
+          <div id="pdf-progress" style="
+            width: 20%;
+            height: 100%;
+            background: #3b82f6;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+          "></div>
+        </div>
+        <div style="font-size: 12px; color: #9ca3af; margin-top: 12px;">
+          正在加载现场照片，请稍候...
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(loadingDiv);
 
-  // 创建优先级映射
-  const priorityMap = new Map<string, FailedItemPriority>();
-  priorityData.forEach(p => priorityMap.set(p.itemId, p));
+  try {
+    // 更新进度
+    const progressEl = document.getElementById('pdf-progress');
+    if (progressEl) progressEl.style.width = '30%';
 
-  // 按优先级排序
-  const sorted = [...failedItems].sort((a, b) => {
-    const priorityA = priorityMap.get(a.itemId)?.priority || 999;
-    const priorityB = priorityMap.get(b.itemId)?.priority || 999;
-    return priorityA - priorityB;
-  });
+    // 创建打印内容（异步，包含照片下载）
+    const printContent = await createPrintContent(record, lastEvaluation);
+    
+    if (progressEl) progressEl.style.width = '80%';
 
-  // 分离急需项和一般项
-  const urgentItems: FailedItemInfo[] = [];
-  const normalItems: FailedItemInfo[] = [];
-
-  sorted.forEach(item => {
-    const priority = priorityMap.get(item.itemId);
-    if (priority && priority.isUrgent) {
-      urgentItems.push(item);
-    } else {
-      normalItems.push(item);
+    // 创建新的窗口
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('请允许弹出窗口以生成PDF报告');
+      return;
     }
-  });
 
-  return { urgentItems, normalItems };
-}
+    // 写入内容
+    printWindow.document.write(printContent);
+    printWindow.document.close();
 
-export function generatePDF(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): void {
-  // 创建打印内容
-  const printContent = createPrintContent(record, lastEvaluation);
+    if (progressEl) progressEl.style.width = '100%';
 
-  // 创建新的窗口
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert('请允许弹出窗口以生成PDF报告');
-    return;
+    // 等待内容加载完成后自动打印
+    printWindow.onload = () => {
+      setTimeout(() => {
+        // 移除加载提示
+        document.body.removeChild(loadingDiv);
+        printWindow.print();
+      }, 500);
+    };
+  } catch (error) {
+    console.error('生成 PDF 失败:', error);
+    document.body.removeChild(loadingDiv);
+    alert('生成 PDF 失败，请重试');
   }
-
-  // 写入内容
-  printWindow.document.write(printContent);
-  printWindow.document.close();
-
-  // 等待内容加载完成后自动打印
-  printWindow.onload = () => {
-    // 延迟一点确保字体加载
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
-  };
 }

@@ -671,7 +671,7 @@ export default function AuditPage() {
     }
 
     // 生成并下载PDF
-    generatePDF(savedRecord, evalType === '整改复查' ? lastEvaluation : undefined);
+    await generatePDF(savedRecord, evalType === '整改复查' ? lastEvaluation : undefined);
     toast.success('PDF报告已生成并下载');
 
     // 重置表单
