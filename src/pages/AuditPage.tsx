@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { auditModules, TOTAL_SCORE } from '../data/modules';
+import { getAuditModules, getTotalScore } from '../data/factoryModules';
 import { AuditResult, Customer, FailedItemPriority } from '../types';
 import {
   CheckCircle2,
@@ -18,12 +18,14 @@ import {
 import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
 import { PrioritySortModal } from '../components/PrioritySortModal';
-import { draftService } from '../lib/database';
+import { draftService, factorySupplierService } from '../lib/database';
 import { uploadTempImage, moveTempImages } from '../lib/supabase';
+import { Supplier } from '../types';
 
 export default function AuditPage() {
   const {
     user,
+    factoryType,
     factoryList,
     supplierList,
     customerList,
@@ -38,6 +40,10 @@ export default function AuditPage() {
     getEvaluationsByFactory,
   } = useApp();
 
+  // 根据工厂类型获取评估模块和总分
+  const auditModules = useMemo(() => getAuditModules(factoryType), [factoryType]);
+  const TOTAL_SCORE = useMemo(() => getTotalScore(factoryType), [factoryType]);
+
   // 表单状态
   const [selectedFactory, setSelectedFactory] = useState<number | null>(null);
   const [factorySearch, setFactorySearch] = useState('');
@@ -47,6 +53,8 @@ export default function AuditPage() {
   const [selectedSupplier, setSelectedSupplier] = useState<number | null>(null);
   const [supplierSearch, setSupplierSearch] = useState('');
   const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+  const [factorySuppliers, setFactorySuppliers] = useState<Supplier[]>([]); // 当前工厂关联的供应商
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [selectedCustomers, setSelectedCustomers] = useState<number[]>([]);
   const [orderNo, setOrderNo] = useState('');
   const [styleNo, setStyleNo] = useState('');
@@ -196,6 +204,42 @@ export default function AuditPage() {
       setLastEvaluation(null);
     }
   }, [evalType, selectedFactory]);
+
+  // 工厂选择变化时，获取关联的供应商
+  useEffect(() => {
+    const loadFactorySuppliers = async () => {
+      if (!selectedFactory) {
+        setFactorySuppliers([]);
+        setSelectedSupplier(null);
+        return;
+      }
+
+      // 获取选中的工厂名称
+      const factory = factoryList.find(f => f.id === selectedFactory);
+      if (!factory) {
+        setFactorySuppliers([]);
+        return;
+      }
+
+      setIsLoadingSuppliers(true);
+      try {
+        const suppliers = await factorySupplierService.getSuppliersByFactory(factory.name);
+        setFactorySuppliers(suppliers);
+        // 如果当前选中的供应商不在新工厂的供应商列表中，清空选择
+        if (selectedSupplier && !suppliers.find(s => s.id === selectedSupplier)) {
+          setSelectedSupplier(null);
+        }
+      } catch (error) {
+        console.error('加载工厂关联供应商失败:', error);
+        toast.error('加载供应商列表失败');
+        setFactorySuppliers([]);
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+
+    loadFactorySuppliers();
+  }, [selectedFactory, factoryList, selectedSupplier, setSelectedSupplier]);
 
   // 监听评估类型变化，重置模块选择
   useEffect(() => {
@@ -362,7 +406,7 @@ export default function AuditPage() {
     }
   }, [user?.id]);
 
-  // 计算当前得分
+  // 计算当前得分（支持新的可多选计分逻辑）
   const { currentScore, percentage, moduleScores } = useMemo(() => {
     let score = 0;
     const modScores: { [key: string]: number } = {};
@@ -374,9 +418,62 @@ export default function AuditPage() {
       Object.values(mod.subModules).forEach(subMod => {
         subMod.items.forEach(item => {
           const result = currentAuditResults[item.id];
-          if (result?.isChecked) {
-            modScore += item.score;
-            score += item.score;
+          if (!result) return;
+
+          // 使用新的可多选计分逻辑
+          if (item.useDetailScore && item.subDetails && item.subDetails.length > 0) {
+            // 如果主项被勾选，直接得满分
+            if (result.isChecked) {
+              modScore += item.detailScore || item.score;
+              score += item.detailScore || item.score;
+            } else {
+              // 主项未勾选，根据小点勾选情况计分
+              const subDetailChecks = result.subDetailChecks || {};
+              const checkedCount = item.subDetails.filter(sub => subDetailChecks[sub.id]).length;
+              const totalCount = item.subDetails.length;
+
+              // 尺寸测量项特殊处理
+              const isSizeMeasurement = item.id === 'fi2_6' || item.id === 'pfi2_6';
+              if (isSizeMeasurement) {
+                // 尺寸测量项：勾选小点=有遗漏=一半分，不勾选=0分
+                if (checkedCount > 0) {
+                  modScore += item.partialScore || (item.score / 2);
+                  score += item.partialScore || (item.score / 2);
+                }
+              } else {
+                // 普通可多选项
+                if (checkedCount === totalCount) {
+                  // 全选：得满分
+                  modScore += item.detailScore || item.score;
+                  score += item.detailScore || item.score;
+                } else if (checkedCount > 0) {
+                  // 部分选择：得一半分
+                  modScore += item.partialScore || (item.score / 2);
+                  score += item.partialScore || (item.score / 2);
+                }
+              }
+              // 全不选：不得分
+            }
+          } else if (item.reverseScoring && item.subDetails) {
+            // 反向计分（如模块8的尺寸测量）：不选得满分，勾选得一半
+            const subDetailChecks = result.subDetailChecks || {};
+            const checkedCount = item.subDetails.filter(sub => subDetailChecks[sub.id]).length;
+            
+            if (checkedCount === 0) {
+              // 全不选：得满分
+              modScore += item.detailScore || item.score;
+              score += item.detailScore || item.score;
+            } else {
+              // 有任何勾选：得一半分
+              modScore += item.partialScore || (item.score / 2);
+              score += item.partialScore || (item.score / 2);
+            }
+          } else {
+            // 普通计分逻辑
+            if (result.isChecked) {
+              modScore += item.score;
+              score += item.score;
+            }
           }
         });
       });
@@ -406,15 +503,60 @@ export default function AuditPage() {
       percentage: finalPercentage,
       moduleScores: modScores,
     };
-  }, [currentAuditResults, selectedModules]);
+  }, [currentAuditResults, selectedModules, auditModules, TOTAL_SCORE, evalType, lastEvaluation]);
 
-  // 处理复选框变更
-  const handleCheckChange = (itemId: string, checked: boolean) => {
+  // 处理复选框变更（主项）
+  const handleCheckChange = (itemId: string, checked: boolean, item?: any) => {
+    const currentResult = currentAuditResults[itemId] || {
+      isChecked: false,
+      details: [],
+      imagePath: null,
+      subDetailChecks: {},
+    };
+
+    // 如果主项被勾选且有可多选小点，自动全选所有小点
+    // 但尺寸测量项除外（fi2_6, pfi2_6），勾选主项表示全部合格，小点应保持不选
+    let newSubDetailChecks = currentResult.subDetailChecks || {};
+    if (checked && item?.useDetailScore && item?.subDetails) {
+      // 尺寸测量项特殊处理：勾选主项=全部合格，不自动勾选小点
+      const isSizeMeasurement = item.id === 'fi2_6' || item.id === 'pfi2_6';
+      if (!isSizeMeasurement) {
+        newSubDetailChecks = {};
+        item.subDetails.forEach((sub: any) => {
+          newSubDetailChecks[sub.id] = true;
+        });
+      }
+    }
+
     setCurrentAuditResults({
       ...currentAuditResults,
       [itemId]: {
-        ...currentAuditResults[itemId],
+        ...currentResult,
         isChecked: checked,
+        subDetailChecks: newSubDetailChecks,
+      },
+    });
+  };
+
+  // 处理小点勾选变更
+  const handleSubDetailChange = (itemId: string, subDetailId: string, checked: boolean) => {
+    const currentResult = currentAuditResults[itemId] || {
+      isChecked: false,
+      details: [],
+      imagePath: null,
+      subDetailChecks: {},
+    };
+
+    const newSubDetailChecks = {
+      ...currentResult.subDetailChecks,
+      [subDetailId]: checked,
+    };
+
+    setCurrentAuditResults({
+      ...currentAuditResults,
+      [itemId]: {
+        ...currentResult,
+        subDetailChecks: newSubDetailChecks,
       },
     });
   };
@@ -652,8 +794,10 @@ export default function AuditPage() {
     if (imageUrls.length > 0 && savedRecord) {
       const tempFolderName = getTempFolderName();
       const finalFolderName = `${tempFolderName}_${savedRecord.id.substring(0, 8)}`;
-      console.log('开始移动临时图片到正式文件夹:', { tempFolderName, finalFolderName });
-      const movedUrls = await moveTempImages(tempFolderName, finalFolderName, imageUrls);
+      const evalId = savedRecord.id.substring(0, 8);
+      const evaluatorName = user?.name || user?.username || '未知用户';
+      console.log('开始移动临时图片到正式文件夹:', { tempFolderName, finalFolderName, evalId, evaluatorName });
+      const movedUrls = await moveTempImages(tempFolderName, finalFolderName, evalId, evaluatorName, imageUrls);
       console.log('图片移动完成:', movedUrls);
       
       // 更新评估记录中的图片URL
@@ -890,15 +1034,38 @@ export default function AuditPage() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setIsSupplierDropdownOpen(!isSupplierDropdownOpen)}
-                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left"
+                onClick={() => {
+                  if (!selectedFactory) {
+                    toast.info('请先选择工厂');
+                    return;
+                  }
+                  if (factorySuppliers.length === 0) {
+                    toast.info('该工厂暂无关联供应商');
+                    return;
+                  }
+                  setIsSupplierDropdownOpen(!isSupplierDropdownOpen);
+                }}
+                disabled={!selectedFactory || isLoadingSuppliers}
+                className={`w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left ${(!selectedFactory || factorySuppliers.length === 0) ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <span className={selectedSupplier === null ? 'text-slate-400' : 'text-slate-700'}>
-                  {selectedSupplier === null ? '请选择供应商' : supplierList.find(s => s.id === selectedSupplier)?.name}
+                  {!selectedFactory 
+                    ? '请先选择工厂' 
+                    : isLoadingSuppliers 
+                      ? '加载中...'
+                      : factorySuppliers.length === 0
+                        ? '该工厂暂无关联供应商'
+                        : selectedSupplier === null 
+                          ? `请选择供应商 (${factorySuppliers.length}个)` 
+                          : factorySuppliers.find(s => s.id === selectedSupplier)?.name}
                 </span>
-                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isSupplierDropdownOpen ? 'rotate-180' : ''}`} />
+                {isLoadingSuppliers ? (
+                  <div className="w-5 h-5 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin" />
+                ) : (
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isSupplierDropdownOpen ? 'rotate-180' : ''}`} />
+                )}
               </button>
-              {isSupplierDropdownOpen && (
+              {isSupplierDropdownOpen && factorySuppliers.length > 0 && (
                 <div className="absolute z-50 w-full mt-2 bg-white border rounded-xl shadow-lg max-h-[300px] overflow-hidden">
                   <div className="p-2 border-b">
                     <input
@@ -911,7 +1078,7 @@ export default function AuditPage() {
                     />
                   </div>
                   <div className="max-h-[200px] overflow-y-auto">
-                    {supplierList
+                    {factorySuppliers
                       .filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
                       .map(supplier => (
                         <button
@@ -927,7 +1094,7 @@ export default function AuditPage() {
                           {supplier.name}
                         </button>
                       ))}
-                    {supplierList.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
+                    {factorySuppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
                       <div className="px-4 py-3 text-sm text-slate-400 text-center">未找到匹配的供应商</div>
                     )}
                   </div>
@@ -1217,11 +1384,68 @@ export default function AuditPage() {
                     })
                     .map(([subModuleName, subModule]) => {
                     const subModuleKey = `${module.id}-${subModuleName}`;
+                    const debugInfo: string[] = [];
                     const subModuleScore = subModule.items.reduce((sum, item) => {
-                      return sum + (currentAuditResults[item.id]?.isChecked ? item.score : 0);
+                      const result = currentAuditResults[item.id];
+                      if (!result) return sum;
+
+                      // 使用新的可多选计分逻辑
+                      if (item.useDetailScore && item.subDetails && item.subDetails.length > 0) {
+                        let itemScore = 0;
+                        // 如果主项被勾选，直接得满分
+                        if (result.isChecked) {
+                          itemScore = item.detailScore || item.score;
+                          if (item.id === 'fi2_6' || item.id === 'pfi2_6') {
+                            debugInfo.push(`${item.id}: checked=${result.isChecked}, score=${itemScore}`);
+                          }
+                          return sum + itemScore;
+                        }
+                        // 主项未勾选，根据小点勾选情况计分
+                        const subDetailChecks = result.subDetailChecks || {};
+                        const checkedCount = item.subDetails.filter(sub => subDetailChecks[sub.id]).length;
+                        const totalCount = item.subDetails.length;
+
+                        // 尺寸测量项特殊处理：勾选小点表示有遗漏，给一半分
+                        const isSizeMeasurement = item.id === 'fi2_6' || item.id === 'pfi2_6';
+                        if (isSizeMeasurement) {
+                          // 尺寸测量项：勾选小点=有遗漏=一半分，不勾选=0分
+                          if (checkedCount > 0) {
+                            itemScore = item.partialScore || (item.score / 2);
+                          }
+                        } else {
+                          // 普通可多选项：全选=满分，部分选=一半分
+                          if (checkedCount === totalCount) {
+                            itemScore = item.detailScore || item.score;
+                          } else if (checkedCount > 0) {
+                            itemScore = item.partialScore || (item.score / 2);
+                          }
+                        }
+                        if (item.id === 'fi2_6' || item.id === 'pfi2_6') {
+                          debugInfo.push(`${item.id}: checked=${result.isChecked}, subChecked=${checkedCount}, score=${itemScore}`);
+                        }
+                        return sum + itemScore;
+                      } else if (item.reverseScoring && item.subDetails) {
+                        // 反向计分（如模块8的尺寸测量）：不选得满分，勾选得一半
+                        const subDetailChecks = result.subDetailChecks || {};
+                        const checkedCount = item.subDetails.filter(sub => subDetailChecks[sub.id]).length;
+
+                        if (checkedCount === 0) {
+                          // 全不选：得满分
+                          return sum + (item.detailScore || item.score);
+                        } else {
+                          // 有任何勾选：得一半分
+                          return sum + (item.partialScore || (item.score / 2));
+                        }
+                      } else {
+                        // 普通计分逻辑
+                        return sum + (result.isChecked ? item.score : 0);
+                      }
                     }, 0);
                     const subModuleTotal = subModule.items.reduce((sum, item) => sum + item.score, 0);
                     const subModulePercent = subModuleTotal > 0 ? (subModuleScore / subModuleTotal) * 100 : 0;
+                    if (debugInfo.length > 0) {
+                      console.log(`${subModuleName}: score=${subModuleScore}, total=${subModuleTotal}, percent=${subModulePercent.toFixed(1)}%`, debugInfo);
+                    }
 
                     return (
                       <div key={subModuleKey}>
@@ -1272,7 +1496,7 @@ export default function AuditPage() {
                                       <input
                                         type="checkbox"
                                         checked={result.isChecked}
-                                        onChange={(e) => handleCheckChange(item.id, e.target.checked)}
+                                        onChange={(e) => handleCheckChange(item.id, e.target.checked, item)}
                                         className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                       />
                                     </div>
@@ -1280,10 +1504,10 @@ export default function AuditPage() {
                                     {/* 评分项内容 */}
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={item.isKey ? 'text-orange-600 font-medium' : ''}>
+                                        <span className={item.isKey || item.score >= 2 ? 'text-orange-600 font-medium' : ''}>
                                           {item.name}
                                         </span>
-                                        {item.isKey && (
+                                        {(item.isKey || item.score >= 2) && (
                                           <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
                                             关键项
                                           </span>
@@ -1301,8 +1525,72 @@ export default function AuditPage() {
                                         )}
                                       </div>
 
-                                      {/* 未通过时显示详情选择 - 改为复选框多选 */}
-                                      {!result.isChecked && item.details.length > 0 && (
+                                      {/* 新的可多选小点逻辑（排除反向计分项） */}
+                                      {item.useDetailScore && !item.reverseScoring && item.subDetails && item.subDetails.length > 0 && (
+                                        <div className="mt-2">
+                                          {/* 主项未勾选时，显示小点供选择 */}
+                                          {!result.isChecked && (
+                                            <div className="flex flex-wrap gap-2">
+                                              {item.subDetails.map((subDetail) => (
+                                                <label
+                                                  key={subDetail.id}
+                                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
+                                                    (result.subDetailChecks || {})[subDetail.id]
+                                                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                                      : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                                  }`}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={(result.subDetailChecks || {})[subDetail.id] || false}
+                                                    onChange={(e) => handleSubDetailChange(item.id, subDetail.id, e.target.checked)}
+                                                    className="hidden"
+                                                  />
+                                                  {subDetail.name}
+                                                </label>
+                                              ))}
+                                            </div>
+                                          )}
+                                          {/* 主项勾选时，显示提示 */}
+                                          {result.isChecked && (
+                                            <div className="mt-1 text-sm text-green-600">
+                                              {item.id === 'fi2_6' || item.id === 'pfi2_6' ? '✓ 全部合格' : '✓ 已全部满足'}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* 反向计分逻辑（如模块8尺寸测量） */}
+                                      {item.reverseScoring && item.subDetails && item.subDetails.length > 0 && (
+                                        <div className="mt-2">
+                                          <div className="flex flex-wrap gap-2">
+                                            {item.subDetails.map((subDetail) => (
+                                              <label
+                                                key={subDetail.id}
+                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
+                                                  (result.subDetailChecks || {})[subDetail.id]
+                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                                    : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                                }`}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={(result.subDetailChecks || {})[subDetail.id] || false}
+                                                  onChange={(e) => handleSubDetailChange(item.id, subDetail.id, e.target.checked)}
+                                                  className="hidden"
+                                                />
+                                                {subDetail.name}
+                                              </label>
+                                            ))}
+                                          </div>
+                                          <div className="mt-1 text-xs text-slate-500">
+                                            {item.comment}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 原有详情选择（仅Light Woven兼容） */}
+                                      {!result.isChecked && !item.useDetailScore && !item.reverseScoring && item.details.length > 0 && (
                                         <div className="mt-2 flex flex-wrap gap-2">
                                           {item.details.map((detail) => (
                                             <label
@@ -1346,12 +1634,7 @@ export default function AuditPage() {
                                         </div>
                                       )}
 
-                                      {/* 改进建议 */}
-                                      {!result.isChecked && item.comment && (
-                                        <div className="mt-2 text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-                                          💡 建议：{item.comment}
-                                        </div>
-                                      )}
+
                                     </div>
 
                                     {/* 拍照上传 - 只有不合格时才显示 */}

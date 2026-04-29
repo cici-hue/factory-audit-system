@@ -1,21 +1,51 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Building2, Lock, User, AlertCircle } from 'lucide-react';
+import { Building2, Lock, User, AlertCircle, Shirt, Sparkles, Loader2 } from 'lucide-react';
+import { FactoryType } from '../types';
 
 export default function LoginPage() {
   const { login } = useApp();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedFactoryType, setSelectedFactoryType] = useState<FactoryType>('light-woven');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const factoryTypes: { type: FactoryType; label: string; icon: React.ReactNode; description: string }[] = [
+    {
+      type: 'light-woven',
+      label: 'Light Woven',
+      icon: <Shirt className="w-6 h-6" />,
+      description: '轻薄梭织'
+    },
+    {
+      type: 'lingerie-swimwear',
+      label: 'Lingerie / Swimwear',
+      icon: <Sparkles className="w-6 h-6" />,
+      description: '内衣泳装'
+    },
+    {
+      type: 'flat-knit',
+      label: 'Flat Knit',
+      icon: <Loader2 className="w-6 h-6" />,
+      description: '横机针织'
+    }
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    // Flat Knit 开发中，暂时不可用
+    if (selectedFactoryType === 'flat-knit') {
+      setError('Flat Knit 功能正在开发中，敬请期待...');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const success = await login(username, password);
+      const success = await login(username, password, selectedFactoryType);
       if (!success) {
         setError('账号或密码不正确');
       }
@@ -37,6 +67,36 @@ export default function LoginPage() {
           </div>
           <h1 className="text-2xl font-bold text-white">欧图工厂审核系统</h1>
           <p className="text-slate-400 mt-2">Factory Audit System</p>
+        </div>
+
+        {/* 工厂类型选择 */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-300 mb-3 text-center">请选择工厂类型</label>
+          <div className="grid grid-cols-3 gap-2">
+            {factoryTypes.map((factory) => (
+              <button
+                key={factory.type}
+                type="button"
+                onClick={() => setSelectedFactoryType(factory.type)}
+                disabled={factory.type === 'flat-knit'}
+                className={`
+                  flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200
+                  ${selectedFactoryType === factory.type 
+                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/30' 
+                    : factory.type === 'flat-knit'
+                      ? 'bg-white/5 border-white/10 text-slate-500 cursor-not-allowed'
+                      : 'bg-white/5 border-white/20 text-slate-300 hover:bg-white/10 hover:border-white/30'
+                  }
+                `}
+              >
+                <div className={`mb-2 ${selectedFactoryType === factory.type ? 'text-white' : factory.type === 'flat-knit' ? 'text-slate-500' : 'text-blue-400'}`}>
+                  {factory.icon}
+                </div>
+                <span className="text-xs font-medium text-center leading-tight">{factory.label}</span>
+                <span className="text-[10px] opacity-70 mt-1">{factory.description}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

@@ -104,18 +104,23 @@ export async function uploadTempImage(
  * 移动临时图片到正式评估文件夹
  * @param tempFolderName 临时文件夹名称
  * @param finalFolderName 正式文件夹名称
+ * @param evalId 评估ID
+ * @param evaluatorName 评估人名称
  * @param imageUrls 图片URL列表
  */
 export async function moveTempImages(
   tempFolderName: string,
   finalFolderName: string,
+  evalId: string,
+  evaluatorName: string,
   imageUrls: string[]
 ): Promise<string[]> {
   const sanitizedTempFolder = `temp_${sanitizeFolderName(tempFolderName)}`;
   const sanitizedFinalFolder = sanitizeFolderName(finalFolderName);
+  const sanitizedEvaluatorName = sanitizeFolderName(evaluatorName);
   const newUrls: string[] = [];
   
-  console.log('移动图片:', { from: sanitizedTempFolder, to: sanitizedFinalFolder });
+  console.log('移动图片:', { from: sanitizedTempFolder, to: sanitizedFinalFolder, evalId, evaluatorName });
   
   for (const url of imageUrls) {
     if (!url.includes(sanitizedTempFolder)) {
@@ -134,7 +139,8 @@ export async function moveTempImages(
       
       const oldPath = urlParts[1];
       const fileName = oldPath.split('/').pop();
-      const newPath = `${sanitizedFinalFolder}/${fileName}`;
+      // 新文件名: 评估人_评估ID_itemId_timestamp.jpg
+      const newPath = `${sanitizedFinalFolder}/${sanitizedEvaluatorName}_${evalId}_${fileName}`;
       
       console.log('复制文件:', { from: oldPath, to: newPath });
       

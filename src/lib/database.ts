@@ -1,5 +1,5 @@
 import { supabase, supabaseUrl } from './supabase';
-import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer, AuditDraft } from '../types';
+import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer, AuditDraft, FactorySupplierRelation } from '../types';
 
 type DbEvalType = 'initial' | 'followup' | 'random';
 type UiEvalType = EvaluationRecord['evalType'];
@@ -123,101 +123,155 @@ export const userService = {
   }
 };
 
-// 工厂服务
-export const factoryService = {
-  // 获取所有工厂
+// 工厂与供应商对应关系服务
+export const factorySupplierService = {
+  // 获取所有工厂（从对应关系表中提取唯一的工厂名称）
   async getFactories(): Promise<Factory[]> {
-    console.log('开始获取工厂数据...');
-    console.log('Supabase实例:', !!supabase);
-    console.log('Supabase URL:', supabaseUrl);
+    console.log('开始获取工厂数据（从对应关系表）...');
     
     try {
-      console.log('开始查询factories表...');
+      // 获取唯一的工厂列表（使用 DISTINCT）
       const { data, error } = await supabase
-        .from('factories')
-        .select('*')
-        .order('created_at');
-
-      console.log('Supabase响应:', { data, error });
+        .from('factory_supplier_relations')
+        .select('id, factory_name, factory_address, factory_contact, factory_phone')
+        .order('factory_name');
 
       if (error) {
         console.error('获取工厂失败:', error);
-        console.error('错误代码:', error.code);
-        console.error('错误消息:', error.message);
-        console.error('错误提示:', error.hint);
-        throw new Error(`获取工厂失败: ${error.message} (代码: ${error.code})`);
+        throw new Error(`获取工厂失败: ${error.message}`);
       }
 
       console.log('获取到工厂数据:', data);
-      console.log('工厂数据长度:', data.length);
       
-      return data.map((factory) => ({
-        id: factory.id,
-        name: factory.name,
-        address: factory.address || '',
-        contact: factory.contact || '',
-        phone: factory.phone || ''
-      }));
+      // 去重：按工厂名称去重
+      const factoryMap = new Map();
+      data?.forEach((item) => {
+        if (!factoryMap.has(item.factory_name)) {
+          factoryMap.set(item.factory_name, {
+            id: item.id,
+            name: item.factory_name,
+            address: item.factory_address || '',
+            contact: item.factory_contact || '',
+            phone: item.factory_phone || ''
+          });
+        }
+      });
+      
+      return Array.from(factoryMap.values());
     } catch (error) {
       console.error('获取工厂时发生异常:', error);
       throw error;
     }
   },
 
-  // 创建工厂
-  async createFactory(factory: Omit<Factory, 'id'>): Promise<Factory | null> {
-    console.log('开始创建工厂:', factory);
+  // 获取指定工厂的所有供应商
+  async getSuppliersByFactory(factoryName: string): Promise<Supplier[]> {
+    console.log('开始获取工厂的供应商:', factoryName);
+    
+    try {
+      const { data, error } = await supabase
+        .from('factory_supplier_relations')
+        .select('id, fid, supplier_name, supplier_contact, supplier_phone')
+        .eq('factory_name', factoryName)
+        .order('supplier_name');
+
+      if (error) {
+        console.error('获取供应商失败:', error);
+        throw new Error(`获取供应商失败: ${error.message}`);
+      }
+
+      console.log('获取到供应商数据:', data);
+      
+      return data?.map((item) => ({
+        id: item.id,
+        name: item.supplier_name,
+        contact: item.supplier_contact || '',
+        phone: item.supplier_phone || '',
+        fid: item.fid || ''
+      })) || [];
+    } catch (error) {
+      console.error('获取供应商时发生异常:', error);
+      throw error;
+    }
+  },
+
+  // 获取所有供应商（从对应关系表中提取唯一的供应商名称）
+  async getAllSuppliers(): Promise<Supplier[]> {
+    console.log('开始获取所有供应商（从对应关系表）...');
+    
+    try {
+      const { data, error } = await supabase
+        .from('factory_supplier_relations')
+        .select('id, fid, supplier_name, supplier_contact, supplier_phone')
+        .order('supplier_name');
+
+      if (error) {
+        console.error('获取供应商失败:', error);
+        throw new Error(`获取供应商失败: ${error.message}`);
+      }
+
+      // 去重：按供应商名称去重
+      const supplierMap = new Map();
+      data?.forEach((item) => {
+        if (!supplierMap.has(item.supplier_name)) {
+          supplierMap.set(item.supplier_name, {
+            id: item.id,
+            name: item.supplier_name,
+            contact: item.supplier_contact || '',
+            phone: item.supplier_phone || ''
+          });
+        }
+      });
+      
+      return Array.from(supplierMap.values());
+    } catch (error) {
+      console.error('获取供应商时发生异常:', error);
+      throw error;
+    }
+  },
+
+  // 创建对应关系
+  async createRelation(relation: Omit<FactorySupplierRelation, 'id'>): Promise<FactorySupplierRelation | null> {
     const { data, error } = await supabase
-      .from('factories')
+      .from('factory_supplier_relations')
       .insert([{
-        name: factory.name,
-        address: factory.address,
-        contact: factory.contact,
-        phone: factory.phone,
-        created_by: factory.createdBy
+        factory_name: relation.factoryName,
+        factory_address: relation.factoryAddress,
+        factory_contact: relation.factoryContact,
+        factory_phone: relation.factoryPhone,
+        supplier_name: relation.supplierName,
+        supplier_contact: relation.supplierContact,
+        supplier_phone: relation.supplierPhone
       }])
       .select()
       .single();
 
     if (error) {
-      console.error('创建工厂失败:', error);
+      console.error('创建对应关系失败:', error);
       return null;
     }
 
-    console.log('创建工厂成功:', data);
     return {
       id: data.id,
-      name: data.name,
-      address: data.address || '',
-      contact: data.contact || '',
-      phone: data.phone || ''
+      factoryName: data.factory_name,
+      factoryAddress: data.factory_address || '',
+      factoryContact: data.factory_contact || '',
+      factoryPhone: data.factory_phone || '',
+      supplierName: data.supplier_name,
+      supplierContact: data.supplier_contact || '',
+      supplierPhone: data.supplier_phone || ''
     };
   },
 
-  // 更新工厂
-  async updateFactory(id: number, updates: Partial<Factory>): Promise<boolean> {
+  // 删除对应关系
+  async deleteRelation(id: number): Promise<boolean> {
     const { error } = await supabase
-      .from('factories')
-      .update(updates)
-      .eq('id', id);
-
-    if (error) {
-      console.error('更新工厂失败:', error);
-      return false;
-    }
-
-    return true;
-  },
-
-  // 删除工厂
-  async deleteFactory(id: number): Promise<boolean> {
-    const { error } = await supabase
-      .from('factories')
+      .from('factory_supplier_relations')
       .delete()
       .eq('id', id);
 
     if (error) {
-      console.error('删除工厂失败:', error);
+      console.error('删除对应关系失败:', error);
       return false;
     }
 
@@ -225,96 +279,31 @@ export const factoryService = {
   }
 };
 
-// 供应商服务
+// 导出兼容的别名，用于简化导入
+export const factoryService = {
+  getFactories: factorySupplierService.getFactories,
+  createFactory: factorySupplierService.createRelation,
+  updateFactory: async (id: number, updates: Partial<Factory>) => {
+    // 通过创建新的对应关系来更新
+    console.warn('更新功能在新表结构中受限，建议删除后重新创建');
+    return false;
+  },
+  deleteFactory: factorySupplierService.deleteRelation
+};
+
 export const supplierService = {
-  async getSuppliers(): Promise<Supplier[]> {
-    console.log('开始获取供应商数据...');
-    console.log('Supabase实例:', !!supabase);
-    console.log('Supabase URL:', supabaseUrl);
-    
-    try {
-      console.log('开始查询suppliers表...');
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('created_at');
-
-      console.log('Supabase响应:', { data, error });
-
-      if (error) {
-        console.error('获取供应商失败:', error);
-        console.error('错误代码:', error.code);
-        console.error('错误消息:', error.message);
-        console.error('错误提示:', error.hint);
-        throw new Error(`获取供应商失败: ${error.message} (代码: ${error.code})`);
-      }
-
-      console.log('获取到供应商数据:', data);
-      console.log('供应商数据长度:', data.length);
-      
-      return data.map((s) => ({
-        id: s.id,
-        name: s.name,
-        contact: s.contact || '',
-        phone: s.phone || '',
-      }));
-    } catch (error) {
-      console.error('获取供应商时发生异常:', error);
-      throw error;
-    }
+  getSuppliers: factorySupplierService.getAllSuppliers,
+  getSuppliersByFactory: (factoryId: number) => {
+    // 需要通过工厂名称查询，这里简化处理
+    console.warn('请使用 factorySupplierService.getSuppliersByFactory(factoryName)');
+    return Promise.resolve([]);
   },
-
-  async createSupplier(supplier: Omit<Supplier, 'id'>): Promise<Supplier | null> {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .insert([{
-        name: supplier.name,
-        contact: supplier.contact || '',
-        phone: supplier.phone || '',
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('创建供应商失败:', error);
-      return null;
-    }
-
-    return {
-      id: data.id,
-      name: data.name,
-      contact: data.contact || '',
-      phone: data.phone || '',
-    };
+  createSupplier: factorySupplierService.createRelation,
+  updateSupplier: async (id: number, updates: Partial<Supplier>) => {
+    console.warn('更新功能在新表结构中受限，建议删除后重新创建');
+    return false;
   },
-
-  async updateSupplier(id: number, updates: Partial<Supplier>): Promise<boolean> {
-    const { error } = await supabase
-      .from('suppliers')
-      .update(updates)
-      .eq('id', id);
-
-    if (error) {
-      console.error('更新供应商失败:', error);
-      return false;
-    }
-
-    return true;
-  },
-
-  async deleteSupplier(id: number): Promise<boolean> {
-    const { error } = await supabase
-      .from('suppliers')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('删除供应商失败:', error);
-      return false;
-    }
-
-    return true;
-  }
+  deleteSupplier: factorySupplierService.deleteRelation
 };
 
 // 客户服务
@@ -519,7 +508,8 @@ export const evaluationService = {
       acc[key] = {
         isChecked: value.isChecked,
         details: value.details || [],
-        imagePath: value.imagePath || null
+        imagePath: value.imagePath || null,
+        subDetailChecks: value.subDetailChecks || {}
       };
       return acc;
     }, {} as typeof evaluation.results) : {};
@@ -638,7 +628,8 @@ export const evaluationService = {
           isChecked: value.isChecked,
           details: value.details || [],
           // 不保存 base64 图片数据，只保存 Storage URL 或 null
-          imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null
+          imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null,
+          subDetailChecks: value.subDetailChecks || {}
         };
         return acc;
       }, {} as typeof updates.results);

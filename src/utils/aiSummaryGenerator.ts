@@ -1,5 +1,6 @@
 // AI总结报告生成器
-import { EvaluationRecord } from '../types';
+import { EvaluationRecord, AuditModule } from '../types';
+import { lightWovenModules, lingerieSwimwearModules } from '../data/factoryModules';
 
 // AI总结报告数据结构
 export interface AISummaryReport {
@@ -18,8 +19,8 @@ export async function generateAISummary(record: EvaluationRecord): Promise<AISum
   return callDeepSeekAPI(evaluationSummary);
 }
 
-// 导入模块定义
-import { auditModules } from '../data/modules';
+// 获取所有模块
+const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules];
 
 // 构建评估数据摘要
 function buildEvaluationSummary(record: EvaluationRecord): string {
@@ -38,30 +39,36 @@ function buildEvaluationSummary(record: EvaluationRecord): string {
   return JSON.stringify(summary, null, 2);
 }
 
+// 创建 item ID 到模块信息的映射
+const itemIdToModuleMap = new Map<string, { item: any; moduleName: string; subModuleName: string }>();
+allModules.forEach(module => {
+  Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
+    subModule.items.forEach(item => {
+      itemIdToModuleMap.set(item.id, { item, moduleName: module.name, subModuleName });
+    });
+  });
+});
+
 // 获取详细的评估结果
 function getDetailedResults(record: EvaluationRecord): any[] {
   const results = record.results || {};
   const detailedResults: any[] = [];
 
-  // 遍历所有模块
-  auditModules.forEach(module => {
-    Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
-      subModule.items.forEach(item => {
-        const result = results[item.id];
-        if (result) {
-          const itemData: any = {
-            模块: module.name,
-            子模块: subModuleName,
-            评估项: item.name,
-            分值: item.score,
-            是否合格: result.isChecked,
-            不合格详情: result.details || [],
-            评估员评论: result.comment || ''
-          };
-          detailedResults.push(itemData);
-        }
-      });
-    });
+  // 只遍历 results 中实际有数据的项
+  Object.entries(results).forEach(([itemId, result]) => {
+    const moduleInfo = itemIdToModuleMap.get(itemId);
+    if (moduleInfo) {
+      const itemData: any = {
+        模块: moduleInfo.moduleName,
+        子模块: moduleInfo.subModuleName,
+        评估项: moduleInfo.item.name,
+        分值: moduleInfo.item.score,
+        是否合格: result.isChecked,
+        不合格详情: result.details || [],
+        评估员评论: result.comment || ''
+      };
+      detailedResults.push(itemData);
+    }
   });
 
   return detailedResults;
@@ -74,26 +81,19 @@ function getFailedItemsDetailed(record: EvaluationRecord): any[] {
 
   console.log('获取不合格项，record.results:', Object.keys(results).length, '项');
 
-  auditModules.forEach(module => {
-    Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
-      subModule.items.forEach(item => {
-        const result = results[item.id];
-        // 调试：打印每个评估项的结果
-        if (result && !result.isChecked) {
-          console.log(`不合格项: ${item.id} - ${item.name}, isChecked: ${result.isChecked}, details:`, result.details);
-        }
-        // 只要 isChecked 为 false 就算不合格，不管 details 有没有内容
-        if (result && !result.isChecked) {
-          failedItems.push({
-            模块: module.name,
-            子模块: subModuleName,
-            评估项: item.name,
-            不合格内容: result.details || [],
-            评估员建议: result.comment || ''
-          });
-        }
+  // 只遍历 results 中实际有数据的项
+  Object.entries(results).forEach(([itemId, result]) => {
+    const moduleInfo = itemIdToModuleMap.get(itemId);
+    if (moduleInfo && !result.isChecked) {
+      console.log(`不合格项: ${itemId} - ${moduleInfo.item.name}, isChecked: ${result.isChecked}, details:`, result.details);
+      failedItems.push({
+        模块: moduleInfo.moduleName,
+        子模块: moduleInfo.subModuleName,
+        评估项: moduleInfo.item.name,
+        不合格内容: result.details || [],
+        评估员建议: result.comment || ''
       });
-    });
+    }
   });
 
   console.log('找到不合格项数量:', failedItems.length);
@@ -226,7 +226,7 @@ function formatAIContent(content: string): string {
   if (!content) return '暂无详细分析';
 
   // 先处理整个内容，去掉Markdown标题符号（但保留表格）
-  let processedContent = content
+  const processedContent = content
     .replace(/^#{1,6}\s*/gm, '')  // 去掉行首的 # ## ### 等标题符号
     .replace(/\*\*/g, '')         // 去掉 ** 粗体符号
     .replace(/\*/g, '')           // 去掉 * 符号

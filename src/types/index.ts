@@ -9,6 +9,12 @@ export interface AuditModule {
   };
 }
 
+// 可多选小点配置
+export interface SubDetailItem {
+  id: string;
+  name: string;
+}
+
 export interface AuditItem {
   id: string;
   name: string;
@@ -16,12 +22,21 @@ export interface AuditItem {
   isKey: boolean;
   details: string[];
   comment: string;
+  // 新的可多选配置
+  subDetails?: SubDetailItem[];  // 可多选的小点列表
+  detailScore?: number;          // 小点全选时的得分（主项勾选时）
+  partialScore?: number;         // 小点部分选中时的得分
+  useDetailScore?: boolean;      // 是否使用新的计分逻辑
+  // 特殊反向计分（如模块8的尺寸测量：不选得满分，勾选得一半）
+  reverseScoring?: boolean;      // true: 不选得满分，勾选得一半
 }
 
 export interface AuditResult {
   isChecked: boolean;
   details: string[];
   imagePath: string | null;
+  // 新增：小点的勾选状态
+  subDetailChecks?: { [subDetailId: string]: boolean };
 }
 
 // 不合格项优先级
@@ -61,13 +76,37 @@ export interface EvaluationRecord {
   notes?: string;
 }
 
-export interface Factory {
+// 工厂与供应商对应关系（新表结构）
+export interface FactorySupplierRelation {
   id: number;
-  name: string;
+  fid?: string;  // 外部系统标识符
+  factoryName: string;
+  factoryAddress?: string;
+  factoryContact?: string;
+  factoryPhone?: string;
+  supplierName: string;
+  supplierContact?: string;
+  supplierPhone?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// 工厂信息（从对应关系表提取）
+export interface Factory {
+  id: number;  // 使用对应关系表的 id
+  name: string;  // factoryName
   address?: string;
   contact?: string;
   phone?: string;
-  createdBy?: string;
+}
+
+// 供应商信息（从对应关系表提取）
+export interface Supplier {
+  id: number;  // 使用对应关系表的 id
+  name: string;  // supplierName
+  contact?: string;
+  phone?: string;
+  fid?: string;  // 外部系统标识符
 }
 
 export interface User {
@@ -82,15 +121,12 @@ export interface AppState {
   isLoggedIn: boolean;
   user: User | null;
   factories: Factory[];
+  supplierList: Supplier[];
   evaluations: EvaluationRecord[];
 }
 
-export interface Supplier {
-  id: number;
-  name: string;
-  contact?: string;
-  phone?: string;
-}
+// 工厂类型
+export type FactoryType = 'light-woven' | 'lingerie-swimwear' | 'flat-knit';
 
 // 评估草稿类型
 export interface AuditDraft {

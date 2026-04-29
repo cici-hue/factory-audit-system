@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer } from '../types';
+import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer, FactoryType } from '../types';
 import { factoryService, evaluationService, userService, supplierService, customerService } from '../lib/database';
 import { factories as defaultFactories, suppliers as defaultSuppliers, mockEvaluations } from '../data/mockData';
 
@@ -7,11 +7,15 @@ interface AppContextType {
   // 认证状态
   isLoggedIn: boolean;
   user: User | null;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string, factoryType: FactoryType) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
   error: string | null;
   setError: (error: string | null) => void;
+
+  // 工厂类型
+  factoryType: FactoryType;
+  setFactoryType: (type: FactoryType) => void;
 
   // 工厂数据
   factoryList: Factory[];
@@ -85,6 +89,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [editingRecord, setEditingRecord] = useState<EvaluationRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // 工厂类型状态
+  const [factoryType, setFactoryType] = useState<FactoryType>(() => {
+    const saved = localStorage.getItem('factoryType');
+    return (saved as FactoryType) || 'light-woven';
+  });
 
   // 从Supabase加载数据
   const syncData = async () => {
@@ -154,14 +164,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string, selectedFactoryType: FactoryType): Promise<boolean> => {
     try {
       // 尝试Supabase登录
       const supabaseUser = await userService.login(username, password);
       if (supabaseUser) {
         setUser(supabaseUser);
         setIsLoggedIn(true);
+        setFactoryType(selectedFactoryType);
         localStorage.setItem('user', JSON.stringify(supabaseUser));
+        localStorage.setItem('factoryType', selectedFactoryType);
         await syncData(); // 登录后同步数据
         return true;
       }
@@ -180,6 +192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsEditMode(false);
     setEditingRecord(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('factoryType');
   };
 
   const addFactory = async (factory: Factory) => {
@@ -407,6 +420,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         setError,
+        factoryType,
+        setFactoryType,
         factoryList,
         setFactoryList,
         addFactory,

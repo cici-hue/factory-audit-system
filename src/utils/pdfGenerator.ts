@@ -1,5 +1,5 @@
-import { auditModules } from '../data/modules';
-import { EvaluationRecord, FailedItemPriority } from '../types';
+import { lightWovenModules, lingerieSwimwearModules } from '../data/factoryModules';
+import { EvaluationRecord, FailedItemPriority, AuditModule, AuditItem } from '../types';
 import { 
   PhotoItem, 
   processPhotosBatch, 
@@ -19,6 +19,53 @@ interface FailedItemInfo {
   details: string[];
   comment: string;
   isKey: boolean;
+  useDetailScore?: boolean;
+  subDetails?: { id: string; name: string }[];
+  subDetailChecks?: { [key: string]: boolean };
+}
+
+// 合并所有工厂类型的模块
+const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules];
+
+// 创建 item ID 到模块信息的映射
+const itemIdToModuleMap = new Map<string, { item: AuditItem; moduleName: string; subModuleName: string }>();
+allModules.forEach(module => {
+  Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
+    subModule.items.forEach(item => {
+      itemIdToModuleMap.set(item.id, { item, moduleName: module.name, subModuleName });
+    });
+  });
+});
+
+// 生成小点勾选详情的 HTML
+function generateSubDetailHTML(item: FailedItemInfo): string {
+  if (!item.useDetailScore || !item.subDetails || item.subDetails.length === 0) {
+    return '';
+  }
+
+  const notMetItems: string[] = [];   // 未满足：未勾选小点（表示有问题）
+  const metItems: string[] = [];      // 已满足：勾选了小点（表示合格）
+
+  item.subDetails.forEach(sub => {
+    const isSubChecked = item.subDetailChecks?.[sub.id] || false;
+    if (isSubChecked) {
+      // 勾选了小点 = 该项合格 = 已满足
+      metItems.push(sub.name);
+    } else {
+      // 未勾选小点 = 该项有问题 = 未满足
+      notMetItems.push(sub.name);
+    }
+  });
+
+  let html = '';
+  if (notMetItems.length > 0) {
+    html += `<div class="item-details"><span style="color: #f59e0b;">✗ 未满足: ${notMetItems.join(', ')}</span></div>`;
+  }
+  if (metItems.length > 0) {
+    html += `<div class="item-details"><span style="color: #10b981;">✓ 已满足: ${metItems.join(', ')}</span></div>`;
+  }
+
+  return html;
 }
 
 // 收集不合格项和照片信息
@@ -32,50 +79,54 @@ function collectFailedItems(record: EvaluationRecord): {
   console.log('collectFailedItems - record.results:', record.results);
   console.log('collectFailedItems - record.selectedModules:', record.selectedModules);
 
-  auditModules.forEach(mod => {
-    if (!record.selectedModules.includes(mod.name)) return;
+  // 只遍历 results 中实际有数据的项
+  Object.entries(record.results).forEach(([itemId, result]) => {
+    const moduleInfo = itemIdToModuleMap.get(itemId);
+    if (!moduleInfo) return;
 
-    Object.entries(mod.subModules).forEach(([subModName, subMod]) => {
-      subMod.items.forEach(item => {
-        const result = record.results[item.id];
-        const isChecked = result ? result.isChecked : false;
-        const details = result ? result.details || [] : [];
-        const comment = result ? result.comment || '' : '';
-        const imagePath = result ? result.imagePath || null : null;
-        
-        const itemInfo: FailedItemInfo = {
-          itemId: item.id,
-          moduleName: mod.name,
-          subModuleName: subModName,
-          itemName: item.name,
-          score: item.score,
+    // 检查该模块是否在当前选中的模块中
+    if (!record.selectedModules.includes(moduleInfo.moduleName)) return;
+
+    const isChecked = result.isChecked;
+    const details = result.details || [];
+    const comment = result.comment || '';
+    const imagePath = result.imagePath || null;
+
+    const itemInfo: FailedItemInfo = {
+      itemId: itemId,
+      moduleName: moduleInfo.moduleName,
+      subModuleName: moduleInfo.subModuleName,
+      itemName: moduleInfo.item.name,
+      score: moduleInfo.item.score,
+      details: details,
+      comment: comment,
+      isKey: moduleInfo.item.isKey,
+      // 保存可多选小点的信息
+      useDetailScore: moduleInfo.item.useDetailScore,
+      subDetails: moduleInfo.item.subDetails,
+      subDetailChecks: result.subDetailChecks
+    };
+
+    if (!isChecked) {
+      failedItems.push(itemInfo);
+
+      // 收集有照片的不合格项
+      if (imagePath) {
+        console.log('收集到照片:', itemId, imagePath);
+        photoItems.push({
+          itemId: itemId,
+          priority: 0, // 稍后设置
+          isUrgent: false, // 稍后设置
+          moduleName: moduleInfo.moduleName,
+          subModuleName: moduleInfo.subModuleName,
+          itemName: moduleInfo.item.name,
+          score: moduleInfo.item.score,
           details: details,
           comment: comment,
-          isKey: item.isKey
-        };
-        
-        if (!isChecked) {
-          failedItems.push(itemInfo);
-          
-          // 收集有照片的不合格项
-          if (imagePath) {
-            console.log('收集到照片:', item.id, imagePath);
-            photoItems.push({
-              itemId: item.id,
-              priority: 0, // 稍后设置
-              isUrgent: false, // 稍后设置
-              moduleName: mod.name,
-              subModuleName: subModName,
-              itemName: item.name,
-              score: item.score,
-              details: details,
-              comment: comment,
-              imageUrl: imagePath
-            });
-          }
-        }
-      });
-    });
+          imageUrl: imagePath
+        });
+      }
+    }
   });
 
   console.log('collectFailedItems - 不合格项数量:', failedItems.length);
@@ -594,6 +645,7 @@ async function createPrintContent(
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ✅ 已整改</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item)}
       </li>
     `).join('')}
   </ul>
@@ -606,6 +658,7 @@ async function createPrintContent(
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ❌ 仍未整改</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item)}
         ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
       </li>
     `).join('')}
@@ -619,6 +672,7 @@ async function createPrintContent(
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ⚠️ 新问题</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item)}
         ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
       </li>
     `).join('')}
@@ -642,6 +696,7 @@ async function createPrintContent(
             <span class="priority-badge urgent-badge">急需</span>
           </div>
           ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+          ${generateSubDetailHTML(item)}
           ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
         </li>
       `).join('')}
@@ -660,6 +715,7 @@ async function createPrintContent(
             <span class="priority-badge normal-badge">一般</span>
           </div>
           ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+          ${generateSubDetailHTML(item)}
           ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
         </li>
       `).join('')}
@@ -675,6 +731,7 @@ async function createPrintContent(
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item)}
         ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
       </li>
     `).join('')}
@@ -688,6 +745,7 @@ async function createPrintContent(
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
         ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item)}
         ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
       </li>
     `).join('')}

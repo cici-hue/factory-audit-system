@@ -210,7 +210,7 @@ function parseAIResponse(aiResponse: string): any {
 function extractSection(text: string, sectionName: string): string {
   const lines = text.split('\n')
   let inSection = false
-  let sectionContent: string[] = []
+  const sectionContent: string[] = []
 
   // 定义所有可能的章节标题（用于识别下一个章节的开始）
   const allSectionTitles = [

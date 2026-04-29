@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowUp, ArrowDown, AlertCircle, GripVertical } from 'lucide-react';
-import { AuditItem, AuditResult, FailedItemPriority } from '../types';
-import { auditModules } from '../data/modules';
+import { AuditItem, AuditResult, FailedItemPriority, AuditModule } from '../types';
+import { lightWovenModules, lingerieSwimwearModules } from '../data/factoryModules';
 
 interface FailedItem {
   itemId: string;
@@ -10,6 +10,19 @@ interface FailedItem {
   moduleName: string;
   subModuleName: string;
 }
+
+// 获取所有模块
+const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules];
+
+// 创建 item ID 到模块信息的映射
+const itemIdToModuleMap = new Map<string, { item: AuditItem; moduleName: string; subModuleName: string }>();
+allModules.forEach(module => {
+  Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
+    subModule.items.forEach(item => {
+      itemIdToModuleMap.set(item.id, { item, moduleName: module.name, subModuleName });
+    });
+  });
+});
 
 interface PrioritySortModalProps {
   isOpen: boolean;
@@ -28,21 +41,20 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
 
     const failedItems: FailedItem[] = [];
     
-    auditModules.forEach(module => {
-      Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
-        subModule.items.forEach(item => {
-          const result = results[item.id];
-          if (result && !result.isChecked) {
-            failedItems.push({
-              itemId: item.id,
-              item,
-              result,
-              moduleName: module.name,
-              subModuleName
-            });
-          }
-        });
-      });
+    // 只遍历 results 中实际有数据的项，而不是所有模块
+    Object.entries(results).forEach(([itemId, result]) => {
+      if (result && !result.isChecked) {
+        const moduleInfo = itemIdToModuleMap.get(itemId);
+        if (moduleInfo) {
+          failedItems.push({
+            itemId,
+            item: moduleInfo.item,
+            result,
+            moduleName: moduleInfo.moduleName,
+            subModuleName: moduleInfo.subModuleName
+          });
+        }
+      }
     });
 
     // 按分值降序排序（分值高的在前）作为初始排序

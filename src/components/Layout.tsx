@@ -13,7 +13,11 @@ import {
   User,
   Users,
   Truck,
+  Shirt,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
+import { FactoryType } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,9 +26,34 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, currentPage, onNavigate }: LayoutProps) {
-  const { user, logout, isEditMode, setEditMode } = useApp();
+  const { user, logout, isEditMode, setEditMode, factoryType } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // 工厂类型显示配置
+  const factoryTypeConfig: Record<FactoryType, { label: string; icon: React.ReactNode; bgClass: string; textClass: string; borderClass: string }> = {
+    'light-woven': { 
+      label: 'Light Woven', 
+      icon: <Shirt className="w-4 h-4" />, 
+      bgClass: 'bg-emerald-500/20',
+      textClass: 'text-emerald-400',
+      borderClass: 'border-emerald-500/30'
+    },
+    'lingerie-swimwear': { 
+      label: 'Lingerie/Swimwear', 
+      icon: <Sparkles className="w-4 h-4" />, 
+      bgClass: 'bg-pink-500/20',
+      textClass: 'text-pink-400',
+      borderClass: 'border-pink-500/30'
+    },
+    'flat-knit': { 
+      label: 'Flat Knit', 
+      icon: <Loader2 className="w-4 h-4" />, 
+      bgClass: 'bg-amber-500/20',
+      textClass: 'text-amber-400',
+      borderClass: 'border-amber-500/30'
+    },
+  };
 
   const menuItems = [
     { id: 'audit', label: '开始评估', icon: ClipboardList },
@@ -83,8 +112,22 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
           </button>
         )}
 
+        {/* 工厂类型显示 */}
+        <div className={`px-4 py-3 ${!sidebarOpen && 'flex justify-center'}`}>
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${factoryTypeConfig[factoryType].bgClass} ${factoryTypeConfig[factoryType].borderClass} ${!sidebarOpen && 'justify-center w-12'}`}>
+            <span className={factoryTypeConfig[factoryType].textClass}>
+              {factoryTypeConfig[factoryType].icon}
+            </span>
+            {sidebarOpen && (
+              <span className="text-sm font-medium text-white">
+                {factoryTypeConfig[factoryType].label}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* 导航菜单 */}
-        <nav className="flex-1 py-6 px-3 space-y-2">
+        <nav className="flex-1 py-4 px-3 space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;

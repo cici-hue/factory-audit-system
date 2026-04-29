@@ -96,7 +96,7 @@ function compressImageBlob(
       URL.revokeObjectURL(url);
       
       // 计算压缩后的尺寸
-      let { width, height } = calculateDimensions(
+      const { width, height } = calculateDimensions(
         img.width,
         img.height,
         options.maxWidth!,
