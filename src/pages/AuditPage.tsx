@@ -293,6 +293,8 @@ export default function AuditPage() {
         isChecked: result.isChecked,
         details: result.details || [],
         imagePath: result.imagePath || null, // 保存图片路径
+        subDetailChecks: result.subDetailChecks || {}, // 保存小点勾选状态
+        comment: result.comment || '', // 保存评论
       };
     });
 
@@ -518,9 +520,12 @@ export default function AuditPage() {
     // 但尺寸测量项除外（fi2_6, pfi2_6），勾选主项表示全部合格，小点应保持不选
     let newSubDetailChecks = currentResult.subDetailChecks || {};
     if (checked && item?.useDetailScore && item?.subDetails) {
-      // 尺寸测量项特殊处理：勾选主项=全部合格，不自动勾选小点
+      // 尺寸测量项特殊处理：勾选主项=全部合格，清空小点勾选状态
       const isSizeMeasurement = item.id === 'fi2_6' || item.id === 'pfi2_6';
-      if (!isSizeMeasurement) {
+      if (isSizeMeasurement) {
+        // 勾选主项表示全部合格，清空所有小点勾选状态
+        newSubDetailChecks = {};
+      } else {
         newSubDetailChecks = {};
         item.subDetails.forEach((sub: any) => {
           newSubDetailChecks[sub.id] = true;
@@ -1561,7 +1566,8 @@ export default function AuditPage() {
                                       )}
 
                                       {/* 反向计分逻辑（如模块8尺寸测量） */}
-                                      {item.reverseScoring && item.subDetails && item.subDetails.length > 0 && (
+                                      {/* 尺寸测量项：勾选主项时隐藏小点（表示全部满足），不勾选时展开小点 */}
+                                      {item.reverseScoring && item.subDetails && item.subDetails.length > 0 && !result.isChecked && (
                                         <div className="mt-2">
                                           <div className="flex flex-wrap gap-2">
                                             {item.subDetails.map((subDetail) => (

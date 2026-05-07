@@ -558,7 +558,6 @@ export const lingerieSwimwearModules: AuditModule[] = [
               { id: 'c2_4_2', name: '含尺码' },
               { id: 'c2_4_3', name: '颜色' },
               { id: 'c2_4_4', name: '款式' },
-              { id: 'c2_4_5', name: '捆号' },
             ]
           },
         ]
@@ -753,6 +752,7 @@ export const lingerieSwimwearModules: AuditModule[] = [
             useDetailScore: true,
             detailScore: 3,
             partialScore: 1.5,
+            reverseScoring: true,  // 反向计分：勾选=有问题
             subDetails: [
               { id: 'fi2_6_1', name: '缺尺寸表内任意测量点' },
             ]
@@ -954,6 +954,7 @@ export const lingerieSwimwearModules: AuditModule[] = [
             useDetailScore: true,
             detailScore: 2,
             partialScore: 1,
+            reverseScoring: true,  // 反向计分：勾选=有问题
             subDetails: [
               { id: 'pfi2_6_1', name: '缺尺寸表内任意测量点' },
             ]
