@@ -37,6 +37,8 @@ export interface AuditResult {
   imagePath: string | null;
   // 新增：小点的勾选状态
   subDetailChecks?: { [subDetailId: string]: boolean };
+  // 新增：打分项评论
+  comment?: string;
 }
 
 // 不合格项优先级

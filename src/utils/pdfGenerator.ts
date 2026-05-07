@@ -22,6 +22,7 @@ interface FailedItemInfo {
   useDetailScore?: boolean;
   subDetails?: { id: string; name: string }[];
   subDetailChecks?: { [key: string]: boolean };
+  reverseScoring?: boolean;  // 新增：反向计分标记
 }
 
 // 合并所有工厂类型的模块
@@ -43,17 +44,30 @@ function generateSubDetailHTML(item: FailedItemInfo): string {
     return '';
   }
 
-  const notMetItems: string[] = [];   // 未满足：未勾选小点（表示有问题）
-  const metItems: string[] = [];      // 已满足：勾选了小点（表示合格）
+  const notMetItems: string[] = [];   // 未满足
+  const metItems: string[] = [];      // 已满足
 
   item.subDetails.forEach(sub => {
     const isSubChecked = item.subDetailChecks?.[sub.id] || false;
-    if (isSubChecked) {
-      // 勾选了小点 = 该项合格 = 已满足
-      metItems.push(sub.name);
+    
+    if (item.reverseScoring) {
+      // 反向计分（如尺寸测量）：
+      // 勾选了小点 = 该项有问题（未满足）
+      // 未勾选小点 = 该项合格（已满足）
+      if (isSubChecked) {
+        notMetItems.push(sub.name);
+      } else {
+        metItems.push(sub.name);
+      }
     } else {
-      // 未勾选小点 = 该项有问题 = 未满足
-      notMetItems.push(sub.name);
+      // 正常计分：
+      // 勾选了小点 = 该项合格（已满足）
+      // 未勾选小点 = 该项有问题（未满足）
+      if (isSubChecked) {
+        metItems.push(sub.name);
+      } else {
+        notMetItems.push(sub.name);
+      }
     }
   });
 
@@ -104,7 +118,8 @@ function collectFailedItems(record: EvaluationRecord): {
       // 保存可多选小点的信息
       useDetailScore: moduleInfo.item.useDetailScore,
       subDetails: moduleInfo.item.subDetails,
-      subDetailChecks: result.subDetailChecks
+      subDetailChecks: result.subDetailChecks,
+      reverseScoring: moduleInfo.item.reverseScoring  // 传递反向计分标记
     };
 
     if (!isChecked) {

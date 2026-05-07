@@ -509,7 +509,8 @@ export const evaluationService = {
         isChecked: value.isChecked,
         details: value.details || [],
         imagePath: value.imagePath || null,
-        subDetailChecks: value.subDetailChecks || {}
+        subDetailChecks: value.subDetailChecks || {},
+        comment: value.comment || ''
       };
       return acc;
     }, {} as typeof evaluation.results) : {};
@@ -629,7 +630,8 @@ export const evaluationService = {
           details: value.details || [],
           // 不保存 base64 图片数据，只保存 Storage URL 或 null
           imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null,
-          subDetailChecks: value.subDetailChecks || {}
+          subDetailChecks: value.subDetailChecks || {},
+          comment: value.comment || ''
         };
         return acc;
       }, {} as typeof updates.results);
@@ -722,7 +724,9 @@ export const draftService = {
           isChecked: value.isChecked,
           details: value.details || [],
           // 不保存 base64 图片数据，只保存 Storage URL 或 null
-          imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null
+          imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null,
+          subDetailChecks: value.subDetailChecks || {},
+          comment: value.comment || ''
         };
         return acc;
       }, {} as typeof draft.currentAuditResults) : {};
