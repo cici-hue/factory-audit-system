@@ -408,6 +408,82 @@ export default function AuditPage() {
     }
   }, [user?.id]);
 
+  // 自动保存功能
+  useEffect(() => {
+    // 只在非编辑模式、非恢复中、已登录且有评估数据时自动保存
+    if (isEditMode || isRestoring || !user?.id) return;
+    
+    // 检查是否有评估数据需要保存
+    const hasData = selectedFactory !== null || Object.keys(currentAuditResults).length > 0;
+    if (!hasData) return;
+
+    // 设置延迟自动保存（防抖）
+    const autoSaveTimer = setTimeout(() => {
+      // 静默保存，不显示提示
+      const autoSave = async () => {
+        try {
+          const resultsWithImages: { [key: string]: AuditResult } = {};
+          Object.entries(currentAuditResults).forEach(([key, result]) => {
+            resultsWithImages[key] = {
+              isChecked: result.isChecked,
+              details: result.details || [],
+              imagePath: result.imagePath || null,
+              subDetailChecks: result.subDetailChecks || {},
+              comment: result.comment || '',
+            };
+          });
+
+          const draftData = {
+            userId: user.id,
+            selectedFactory,
+            selectedSupplier,
+            selectedCustomers,
+            evalDate,
+            evalType,
+            orderNo,
+            styleNo,
+            productionStatus,
+            selectedModules,
+            comments,
+            currentAuditResults: resultsWithImages,
+            expandedModules: Array.from(expandedModules),
+            expandedSubModules: Array.from(expandedSubModules),
+          };
+
+          const saved = await draftService.saveDraft(draftData);
+          if (saved) {
+            setLastSavedTime(new Date());
+            setHasAutoSaveData(true);
+            console.log('自动保存成功');
+          }
+        } catch (error) {
+          console.error('自动保存失败:', error);
+        }
+      };
+      
+      autoSave();
+    }, 30000); // 30秒后自动保存
+
+    return () => clearTimeout(autoSaveTimer);
+  }, [
+    currentAuditResults,
+    selectedFactory,
+    selectedSupplier,
+    selectedCustomers,
+    evalDate,
+    evalType,
+    orderNo,
+    styleNo,
+    productionStatus,
+    selectedModules,
+    comments,
+    expandedModules,
+    expandedSubModules,
+    user?.id,
+    isEditMode,
+    isRestoring,
+  ]);
+
   // 计算当前得分（支持新的可多选计分逻辑）
   const { currentScore, percentage, moduleScores } = useMemo(() => {
     let score = 0;
