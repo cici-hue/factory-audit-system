@@ -63,6 +63,7 @@ export default function AuditPage() {
   const [comments, setComments] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [expandedSubModules, setExpandedSubModules] = useState<Set<string>>(new Set());
+  const [skippedSubModules, setSkippedSubModules] = useState<Set<string>>(new Set());
   const [customers] = useState<Customer[]>(customerList);
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
 
@@ -72,6 +73,11 @@ export default function AuditPage() {
 
   // 优先级排序相关
   const [showPriorityModal, setShowPriorityModal] = useState(false);
+
+  // 评估指导模态框相关
+  const [showGuidanceModal, setShowGuidanceModal] = useState(false);
+  const [currentGuidance, setCurrentGuidance] = useState('');
+  const [currentPenaltyRule, setCurrentPenaltyRule] = useState('');
   const [pendingEvaluation, setPendingEvaluation] = useState<any>(null);
   const [failedItemsPriority, setFailedItemsPriority] = useState<FailedItemPriority[]>([]);
 
@@ -494,12 +500,34 @@ export default function AuditPage() {
       let modScore = 0;
 
       Object.values(mod.subModules).forEach(subMod => {
-        subMod.items.forEach(item => {
-          const result = currentAuditResults[item.id];
-          if (!result) return;
+          const penalizedItemIds = new Set<string>();
+          subMod.items.forEach(item => {
+            const result = currentAuditResults[item.id];
+            if (result && item.penaltyItems && result.selectedScore !== undefined) {
+              const shouldPenalize = item.penaltyOnZeroScore 
+                ? result.selectedScore === 0 
+                : result.selectedScore > 0;
+              if (shouldPenalize) {
+                item.penaltyItems.forEach(penalizedId => {
+                  penalizedItemIds.add(penalizedId);
+                });
+              }
+            }
+          });
 
-          // 使用新的可多选计分逻辑
-          if (item.useDetailScore && item.subDetails && item.subDetails.length > 0) {
+          subMod.items.forEach(item => {
+            const result = currentAuditResults[item.id];
+            if (!result) return;
+
+            const isPenalized = penalizedItemIds.has(item.id);
+
+            if (item.scoreOptions && item.scoreOptions.length > 0) {
+              const selectedScore = result.selectedScore;
+              if (selectedScore !== undefined && !isPenalized) {
+                modScore += selectedScore;
+                score += selectedScore;
+              }
+            } else if (item.useDetailScore && item.subDetails && item.subDetails.length > 0) {
             // 如果主项被勾选，直接得满分
             if (result.isChecked) {
               modScore += item.detailScore || item.score;
@@ -556,16 +584,17 @@ export default function AuditPage() {
         });
       });
 
-      modScores[mod.name] = modScore;
+      modScores[mod.name] = Math.max(modScore, 0);
     });
 
+    const finalScore = Object.values(modScores).reduce((sum, s) => sum + s, 0);
     // 如果是整改复查，使用累加式得分计算
-    let finalPercentage = (score / TOTAL_SCORE) * 100;
+    let finalPercentage = (finalScore / TOTAL_SCORE) * 100;
     
     if (evalType === '整改复查' && lastEvaluation) {
       // 累加得分：上次得分 + 本次整改复查得分
       const lastScore = (lastEvaluation.overallPercent / 100) * TOTAL_SCORE;
-      const currentRectificationScore = score;
+      const currentRectificationScore = finalScore;
       const accumulatedScore = lastScore + currentRectificationScore;
       finalPercentage = (accumulatedScore / TOTAL_SCORE) * 100;
       console.log('整改复查累加得分计算:', {
@@ -577,7 +606,7 @@ export default function AuditPage() {
     }
 
     return {
-      currentScore: score,
+      currentScore: finalScore,
       percentage: finalPercentage,
       moduleScores: modScores,
     };
@@ -651,6 +680,47 @@ export default function AuditPage() {
         details,
       },
     });
+  };
+
+  // 处理 Flat Knit 得分变更
+  const handleScoreChange = (itemId: string, score: number) => {
+    const currentResult = currentAuditResults[itemId] || {
+      isChecked: false,
+      details: [],
+      imagePath: null,
+    };
+    const newScore = currentResult.selectedScore === score ? undefined : score;
+    const newResults = {
+      ...currentAuditResults,
+      [itemId]: {
+        ...currentResult,
+        selectedScore: newScore,
+      },
+    };
+    if (newScore !== undefined) {
+      auditModules.forEach(mod => {
+        Object.values(mod.subModules).forEach(subMod => {
+          const clickedItem = subMod.items.find(item => item.id === itemId);
+          if (clickedItem && clickedItem.penaltyItems) {
+            const shouldPenalize = clickedItem.penaltyOnZeroScore 
+              ? newScore === 0 
+              : true;
+            if (shouldPenalize) {
+              clickedItem.penaltyItems.forEach(penalizedId => {
+                if (newResults[penalizedId]) {
+                  newResults[penalizedId] = {
+                    ...newResults[penalizedId],
+                    selectedScore: undefined,
+                    isChecked: false,
+                  };
+                }
+              });
+            }
+          }
+        });
+      });
+    }
+    setCurrentAuditResults(newResults);
   };
 
   // 处理评论输入
@@ -745,7 +815,27 @@ export default function AuditPage() {
       if (!selectedModules.includes(mod.name)) return;
       Object.values(mod.subModules).forEach(subMod => {
         subMod.items.forEach(item => {
-          newResults[item.id] = { isChecked: true, details: [], imagePath: null };
+          if (item.scoreOptions && item.scoreOptions.length > 0) {
+            const hasPositiveScore = item.scoreOptions.some(s => s > 0);
+            if (hasPositiveScore) {
+              const maxScore = Math.max(...item.scoreOptions);
+              newResults[item.id] = { 
+                isChecked: true, 
+                details: [], 
+                imagePath: null,
+                selectedScore: maxScore
+              };
+            } else {
+              newResults[item.id] = { 
+                isChecked: false, 
+                details: [], 
+                imagePath: null,
+                selectedScore: undefined
+              };
+            }
+          } else {
+            newResults[item.id] = { isChecked: true, details: [], imagePath: null };
+          }
         });
       });
     });
@@ -758,7 +848,12 @@ export default function AuditPage() {
       if (!selectedModules.includes(mod.name)) return;
       Object.values(mod.subModules).forEach(subMod => {
         subMod.items.forEach(item => {
-          newResults[item.id] = { isChecked: false, details: [], imagePath: null };
+          newResults[item.id] = { 
+            isChecked: false, 
+            details: [], 
+            imagePath: null,
+            selectedScore: undefined
+          };
         });
       });
     });
@@ -807,6 +902,7 @@ export default function AuditPage() {
       orderNo: orderNo.trim() || undefined,
       styleNo: styleNo.trim() || undefined,
       productionStatus: productionStatus.trim() || undefined,
+      factoryType,
       selectedModules,
       overallPercent: percentage,
       results: currentAuditResults,
@@ -1422,7 +1518,11 @@ export default function AuditPage() {
           )}
         </div>
         <div className="text-lg font-semibold">
-          总得分率：<span className="text-blue-600">{percentage.toFixed(2)}%</span>
+          {factoryType === 'flat-knit' ? (
+            <span>总得分：<span className="text-blue-600">{currentScore.toFixed(2)}分</span></span>
+          ) : (
+            <span>总得分率：<span className="text-blue-600">{percentage.toFixed(2)}%</span></span>
+          )}
         </div>
       </div>
 
@@ -1445,7 +1545,10 @@ export default function AuditPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-lg font-semibold">{module.name}</span>
                   <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-lg">
-                    {(modulePercentages[module.name] ?? 0).toFixed(1)}%
+                    {factoryType === 'flat-knit' 
+                      ? `${(moduleScores[module.name] ?? 0).toFixed(2)}分` 
+                      : `${(modulePercentages[module.name] ?? 0).toFixed(1)}%`
+                    }
                   </span>
                 </div>
                 {expandedModules.has(module.id) ? (
@@ -1465,10 +1568,40 @@ export default function AuditPage() {
                     })
                     .map(([subModuleName, subModule]) => {
                     const subModuleKey = `${module.id}-${subModuleName}`;
+                    const isSkipped = skippedSubModules.has(subModuleKey);
                     const debugInfo: string[] = [];
-                    const subModuleScore = subModule.items.reduce((sum, item) => {
+                    const hasPenaltyZeroScore = subModule.items.some(item => {
+                      const result = currentAuditResults[item.id];
+                      if (!result || !item.penaltyItems || result.selectedScore === undefined) return false;
+                      if (item.penaltyOnZeroScore) {
+                        return result.selectedScore === 0;
+                      } else {
+                        return result.selectedScore !== undefined;
+                      }
+                    });
+                    const rawSubModuleScore = isSkipped || hasPenaltyZeroScore 
+                      ? subModule.items.reduce((sum, item) => {
+                          const result = currentAuditResults[item.id];
+                          if (!result) return sum;
+                          if (item.scoreOptions && item.scoreOptions.length > 0) {
+                            const selectedScore = result.selectedScore;
+                            if (selectedScore !== undefined) {
+                              return sum + selectedScore;
+                            }
+                          }
+                          return sum;
+                        }, 0)
+                      : subModule.items.reduce((sum, item) => {
                       const result = currentAuditResults[item.id];
                       if (!result) return sum;
+
+                      if (item.scoreOptions && item.scoreOptions.length > 0) {
+                        const selectedScore = result.selectedScore;
+                        if (selectedScore !== undefined) {
+                          return sum + selectedScore;
+                        }
+                        return sum;
+                      }
 
                       // 使用新的可多选计分逻辑
                       if (item.useDetailScore && item.subDetails && item.subDetails.length > 0) {
@@ -1522,13 +1655,16 @@ export default function AuditPage() {
                         return sum + (result.isChecked ? item.score : 0);
                       }
                     }, 0);
+                    const subModuleScore = rawSubModuleScore;
                     const subModuleTotal = subModule.items.reduce((sum, item) => sum + item.score, 0);
                     const subModulePercent = subModuleTotal > 0 ? (subModuleScore / subModuleTotal) * 100 : 0;
                     if (debugInfo.length > 0) {
                       console.log(`${subModuleName}: score=${subModuleScore}, total=${subModuleTotal}, percent=${subModulePercent.toFixed(1)}%`, debugInfo);
                     }
 
-                    return (
+                    const isOptional = subModule.optional;
+
+                        return (
                       <div key={subModuleKey}>
                         <button
                           onClick={() => toggleSubModule(module.id, subModuleName)}
@@ -1537,8 +1673,30 @@ export default function AuditPage() {
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{subModuleName}</span>
                             <span className="text-sm text-slate-500">
-                              ({subModulePercent.toFixed(1)}%)
+                              {factoryType === 'flat-knit' 
+                                ? `(${subModuleScore.toFixed(2)}分)` 
+                                : `(${subModulePercent.toFixed(1)}%)`
+                              }
                             </span>
+                            {isOptional && (
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isSkipped}
+                                  onChange={(e) => {
+                                    const newSkipped = new Set(skippedSubModules);
+                                    if (e.target.checked) {
+                                      newSkipped.add(subModuleKey);
+                                    } else {
+                                      newSkipped.delete(subModuleKey);
+                                    }
+                                    setSkippedSubModules(newSkipped);
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-slate-500">{subModule.optionalLabel}</span>
+                              </label>
+                            )}
                           </div>
                           {expandedSubModules.has(subModuleKey) ? (
                             <ChevronUp className="w-4 h-4 text-slate-400" />
@@ -1548,216 +1706,337 @@ export default function AuditPage() {
                         </button>
 
                         {expandedSubModules.has(subModuleKey) && (
-                          <div className="px-6 pb-4 space-y-3">
+                          <div className={`px-6 pb-4 space-y-3 ${isSkipped ? 'opacity-50' : ''}`}>
                             {subModule.items
                               .filter((item) => {
                                 if (evalType !== '整改复查' || !onlyShowLastFailed) return true;
                                 return lastFailedItemIds.has(item.id);
                               })
                               .map(item => {
-                              const result = currentAuditResults[item.id] || {
-                                isChecked: false,
-                                details: [],
-                                imagePath: null,
-                              };
-                              const lastStatus = getLastStatus(item.id);
+                                const result = currentAuditResults[item.id] || {
+                                  isChecked: false,
+                                  details: [],
+                                  imagePath: null,
+                                };
+                                const lastStatus = getLastStatus(item.id);
 
-                              return (
-                                <div
-                                  key={item.id}
-                                  className={`p-4 rounded-xl border-2 transition-colors ${
-                                    result.isChecked
-                                      ? 'border-green-200 bg-green-50/50'
-                                      : 'border-slate-100'
-                                  }`}
-                                >
-                                  <div className="flex items-start gap-4">
-                                    {/* 复选框 */}
-                                    <div className="flex-shrink-0 pt-1">
-                                      <input
-                                        type="checkbox"
-                                        checked={result.isChecked}
-                                        onChange={(e) => handleCheckChange(item.id, e.target.checked, item)}
-                                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                      />
-                                    </div>
+                                let isPenalized = false;
+                                subModule.items.forEach(otherItem => {
+                                  const otherResult = currentAuditResults[otherItem.id];
+                                  if (otherResult && otherItem.penaltyItems && otherResult.selectedScore !== undefined) {
+                                    const shouldPenalize = otherItem.penaltyOnZeroScore 
+                                      ? otherResult.selectedScore === 0 
+                                      : true;
+                                    if (shouldPenalize && otherItem.penaltyItems.includes(item.id)) {
+                                      isPenalized = true;
+                                    }
+                                  }
+                                });
 
-                                    {/* 评分项内容 */}
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={item.isKey || item.score >= 2 ? 'text-orange-600 font-medium' : ''}>
-                                          {item.name}
-                                        </span>
-                                        {(item.isKey || item.score >= 2) && (
-                                          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
-                                            关键项
-                                          </span>
-                                        )}
-                                        {lastStatus && lastStatus !== '' && (
-                                          <span
-                                            className={`text-xs ${
-                                              lastStatus.includes('合格')
-                                                ? 'text-green-600'
-                                                : 'text-red-600'
-                                            }`}
-                                          >
-                                            | {lastStatus}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* 新的可多选小点逻辑（排除反向计分项） */}
-                                      {item.useDetailScore && !item.reverseScoring && item.subDetails && item.subDetails.length > 0 && (
-                                        <div className="mt-2">
-                                          {/* 主项未勾选时，显示小点供选择 */}
-                                          {!result.isChecked && (
-                                            <div className="flex flex-wrap gap-2">
-                                              {item.subDetails.map((subDetail) => (
-                                                <label
-                                                  key={subDetail.id}
-                                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
-                                                    (result.subDetailChecks || {})[subDetail.id]
-                                                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                                                      : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                                                  }`}
-                                                >
-                                                  <input
-                                                    type="checkbox"
-                                                    checked={(result.subDetailChecks || {})[subDetail.id] || false}
-                                                    onChange={(e) => handleSubDetailChange(item.id, subDetail.id, e.target.checked)}
-                                                    className="hidden"
-                                                  />
-                                                  {subDetail.name}
-                                                </label>
-                                              ))}
-                                            </div>
-                                          )}
-                                          {/* 主项勾选时，显示提示 */}
-                                          {result.isChecked && (
-                                            <div className="mt-1 text-sm text-green-600">
-                                              {item.id === 'fi2_6' || item.id === 'pfi2_6' ? '✓ 全部合格' : '✓ 已全部满足'}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* 反向计分逻辑（如模块8尺寸测量） */}
-                                      {/* 尺寸测量项：勾选主项时隐藏小点（表示全部满足），不勾选时展开小点 */}
-                                      {item.reverseScoring && item.subDetails && item.subDetails.length > 0 && !result.isChecked && (
-                                        <div className="mt-2">
-                                          <div className="flex flex-wrap gap-2">
-                                            {item.subDetails.map((subDetail) => (
-                                              <label
-                                                key={subDetail.id}
-                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
-                                                  (result.subDetailChecks || {})[subDetail.id]
-                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                    : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                if (item.scoreOptions && item.scoreOptions.length > 0) {
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      className={`p-4 rounded-xl border-2 transition-colors ${
+                                        result.selectedScore !== undefined && result.selectedScore > 0
+                                          ? 'border-green-200 bg-green-50/50'
+                                          : 'border-slate-100'
+                                      }`}
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-medium">{item.name}</span>
+                                            {lastStatus && lastStatus !== '' && (
+                                              <span
+                                                className={`text-xs ${
+                                                  lastStatus.includes('合格')
+                                                    ? 'text-green-600'
+                                                    : 'text-red-600'
                                                 }`}
                                               >
-                                                <input
-                                                  type="checkbox"
-                                                  checked={(result.subDetailChecks || {})[subDetail.id] || false}
-                                                  onChange={(e) => handleSubDetailChange(item.id, subDetail.id, e.target.checked)}
-                                                  className="hidden"
-                                                />
-                                                {subDetail.name}
-                                              </label>
+                                                | {lastStatus}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="flex flex-wrap gap-2 items-center">
+                                            {(item.guidance || item.penaltyRule) && !isSkipped && (
+                                              <button
+                                                onClick={() => {
+                                                  setCurrentGuidance(item.guidance || '');
+                                                  setCurrentPenaltyRule(item.penaltyRule || '');
+                                                  setShowGuidanceModal(true);
+                                                }}
+                                                className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm"
+                                                title="评估指导"
+                                              >
+                                                <span className="text-xs font-bold">?</span>
+                                                <span className="text-xs">评估指导</span>
+                                              </button>
+                                            )}
+
+                                            {item.scoreOptions.map((score, idx) => (
+                                              <button
+                                                key={idx}
+                                                onClick={() => !isPenalized && !isSkipped && handleScoreChange(item.id, score)}
+                                                disabled={isPenalized || isSkipped}
+                                                className={`px-5 py-2 rounded-lg text-base font-medium transition-colors ${
+                                                  isPenalized || isSkipped
+                                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                    : result.selectedScore === score
+                                                      ? score > 0
+                                                        ? 'bg-green-500 text-white'
+                                                        : score < 0
+                                                          ? 'bg-red-500 text-white'
+                                                          : 'bg-slate-500 text-white'
+                                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                }`}
+                                              >
+                                                {score}分
+                                              </button>
                                             ))}
                                           </div>
-                                          <div className="mt-1 text-xs text-slate-500">
-                                            {item.comment}
-                                          </div>
                                         </div>
-                                      )}
 
-                                      {/* 原有详情选择（仅Light Woven兼容） */}
-                                      {!result.isChecked && !item.useDetailScore && !item.reverseScoring && item.details.length > 0 && (
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                          {item.details.map((detail) => (
-                                            <label
-                                              key={detail}
-                                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
-                                                (result.details || []).includes(detail)
-                                                  ? 'bg-red-100 text-red-700 border border-red-200'
-                                                  : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                                              }`}
-                                            >
-                                              <input
-                                                type="checkbox"
-                                                checked={(result.details || []).includes(detail)}
-                                                onChange={(e) => {
-                                                  const currentDetails = result.details || [];
-                                                  const newDetails = e.target.checked
-                                                    ? [...currentDetails, detail]
-                                                    : currentDetails.filter((d) => d !== detail);
-                                                  handleDetailsChange(item.id, newDetails);
-                                                }}
-                                                className="hidden"
-                                              />
-                                              {detail}
-                                            </label>
-                                          ))}
-                                        </div>
-                                      )}
-
-                                      {/* 未通过时显示评论输入框 */}
-                                      {!result.isChecked && (
                                         <div className="mt-3">
                                           <label className="block text-sm font-medium text-slate-700 mb-1">
                                             评论：
                                           </label>
                                           <textarea
                                             value={result.comment || ''}
-                                            onChange={(e) => handleCommentChange(item.id, e.target.value)}
+                                            onChange={(e) => !isSkipped && handleCommentChange(item.id, e.target.value)}
+                                            disabled={isSkipped}
                                             placeholder="请输入评论..."
-                                            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
+                                            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px] ${isSkipped ? 'bg-slate-100 cursor-not-allowed' : ''}`}
                                           />
                                         </div>
-                                      )}
 
+                                        <div className="mt-3 flex items-center gap-3">
+                                          {!isSkipped && (
+                                            <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                              <Camera className="w-4 h-4" />
+                                              <span className="text-sm">拍照</span>
+                                              <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                  const file = e.target.files?.[0];
+                                                  if (file) handleImageUpload(item.id, file);
+                                                }}
+                                              />
+                                            </label>
+                                          )}
 
+                                          {result.imagePath && (
+                                            <div className="relative">
+                                              <img
+                                                src={result.imagePath}
+                                                alt="证据"
+                                                className="w-16 h-16 object-cover rounded-lg"
+                                              />
+                                              <button
+                                                onClick={() => !isSkipped && handleDeleteImage(item.id)}
+                                                disabled={isSkipped}
+                                                className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                                              >
+                                                ×
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
-
-                                    {/* 拍照上传 - 只有不合格时才显示 */}
-                                    {!result.isChecked && (
-                                      <div className="flex-shrink-0">
-                                        <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
-                                          <Camera className="w-4 h-4" />
-                                          <span className="text-sm">拍照</span>
+                                  );
+                                } else {
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      className={`p-4 rounded-xl border-2 transition-colors ${
+                                        result.isChecked
+                                          ? 'border-green-200 bg-green-50/50'
+                                          : 'border-slate-100'
+                                      }`}
+                                    >
+                                      <div className="flex items-start gap-4">
+                                        <div className="flex-shrink-0 pt-1">
                                           <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                              const file = e.target.files?.[0];
-                                              if (file) handleImageUpload(item.id, file);
-                                            }}
+                                            type="checkbox"
+                                            checked={result.isChecked}
+                                            onChange={(e) => !isSkipped && handleCheckChange(item.id, e.target.checked, item)}
+                                            disabled={isSkipped}
+                                            className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                           />
-                                        </label>
-                                      </div>
-                                    )}
+                                        </div>
 
-                                    {/* 图片预览 */}
-                                    {result.imagePath && (
-                                      <div className="flex-shrink-0 relative">
-                                        <img
-                                          src={result.imagePath}
-                                          alt="证据"
-                                          className="w-16 h-16 object-cover rounded-lg"
-                                        />
-                                        <button
-                                          onClick={() => handleDeleteImage(item.id)}
-                                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
-                                        >
-                                          ×
-                                        </button>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className={item.isKey || item.score >= 2 ? 'text-orange-600 font-medium' : ''}>
+                                              {item.name}
+                                            </span>
+                                            {(item.isKey || item.score >= 2) && (
+                                              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
+                                                关键项
+                                              </span>
+                                            )}
+                                            {lastStatus && lastStatus !== '' && (
+                                              <span
+                                                className={`text-xs ${
+                                                  lastStatus.includes('合格')
+                                                    ? 'text-green-600'
+                                                    : 'text-red-600'
+                                                }`}
+                                              >
+                                                | {lastStatus}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {item.useDetailScore && !item.reverseScoring && item.subDetails && item.subDetails.length > 0 && (
+                                            <div className="mt-2">
+                                              {!result.isChecked && !isSkipped && (
+                                                <div className="flex flex-wrap gap-2">
+                                                  {item.subDetails.map((subDetail) => (
+                                                    <label
+                                                      key={subDetail.id}
+                                                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
+                                                        (result.subDetailChecks || {})[subDetail.id]
+                                                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                                      }`}
+                                                    >
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={(result.subDetailChecks || {})[subDetail.id] || false}
+                                                        onChange={(e) => handleSubDetailChange(item.id, subDetail.id, e.target.checked)}
+                                                        className="hidden"
+                                                      />
+                                                      {subDetail.name}
+                                                    </label>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              {result.isChecked && (
+                                                <div className="mt-1 text-sm text-green-600">
+                                                  {item.id === 'fi2_6' || item.id === 'pfi2_6' ? '✓ 全部合格' : '✓ 已全部满足'}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {item.reverseScoring && item.subDetails && item.subDetails.length > 0 && !result.isChecked && !isSkipped && (
+                                            <div className="mt-2">
+                                              <div className="flex flex-wrap gap-2">
+                                                {item.subDetails.map((subDetail) => (
+                                                  <label
+                                                    key={subDetail.id}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
+                                                      (result.subDetailChecks || {})[subDetail.id]
+                                                        ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                                        : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                                    }`}
+                                                  >
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={(result.subDetailChecks || {})[subDetail.id] || false}
+                                                      onChange={(e) => handleSubDetailChange(item.id, subDetail.id, e.target.checked)}
+                                                      className="hidden"
+                                                    />
+                                                    {subDetail.name}
+                                                  </label>
+                                                ))}
+                                              </div>
+                                              <div className="mt-1 text-xs text-slate-500">
+                                                {item.comment}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {!result.isChecked && !item.useDetailScore && !item.reverseScoring && item.details.length > 0 && !isSkipped && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                              {item.details.map((detail) => (
+                                                <label
+                                                  key={detail}
+                                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${
+                                                    (result.details || []).includes(detail)
+                                                      ? 'bg-red-100 text-red-700 border border-red-200'
+                                                      : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                                  }`}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={(result.details || []).includes(detail)}
+                                                    onChange={(e) => {
+                                                      const currentDetails = result.details || [];
+                                                      const newDetails = e.target.checked
+                                                        ? [...currentDetails, detail]
+                                                        : currentDetails.filter((d) => d !== detail);
+                                                      handleDetailsChange(item.id, newDetails);
+                                                    }}
+                                                    className="hidden"
+                                                  />
+                                                  {detail}
+                                                </label>
+                                              ))}
+                                            </div>
+                                          )}
+
+                                          {!result.isChecked && (
+                                            <div className="mt-3">
+                                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                评论：
+                                              </label>
+                                              <textarea
+                                                value={result.comment || ''}
+                                                onChange={(e) => !isSkipped && handleCommentChange(item.id, e.target.value)}
+                                                disabled={isSkipped}
+                                                placeholder="请输入评论..."
+                                                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px] ${isSkipped ? 'bg-slate-100 cursor-not-allowed' : ''}`}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {!result.isChecked && !isSkipped && (
+                                          <div className="flex-shrink-0">
+                                            <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                              <Camera className="w-4 h-4" />
+                                              <span className="text-sm">拍照</span>
+                                              <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                  const file = e.target.files?.[0];
+                                                  if (file) handleImageUpload(item.id, file);
+                                                }}
+                                              />
+                                            </label>
+                                          </div>
+                                        )}
+
+                                        {result.imagePath && (
+                                          <div className="flex-shrink-0 relative">
+                                            <img
+                                              src={result.imagePath}
+                                              alt="证据"
+                                              className="w-16 h-16 object-cover rounded-lg"
+                                            />
+                                            <button
+                                              onClick={() => !isSkipped && handleDeleteImage(item.id)}
+                                              disabled={isSkipped}
+                                              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                                            >
+                                              ×
+                                            </button>
+                                          </div>
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                    </div>
+                                  );
+                                }
+                              })}
                           </div>
                         )}
                       </div>
@@ -1785,9 +2064,9 @@ export default function AuditPage() {
           </div>
           <div className="flex flex-col justify-between">
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-sm text-slate-500 mb-1">得分率</div>
+              <div className="text-sm text-slate-500 mb-1">{factoryType === 'flat-knit' ? '总分数' : '得分率'}</div>
               <div className="text-3xl font-bold text-blue-600">
-                {percentage.toFixed(2)}%
+                {factoryType === 'flat-knit' ? `${currentScore.toFixed(2)}分` : `${percentage.toFixed(2)}%`}
               </div>
             </div>
             <button
@@ -1808,6 +2087,38 @@ export default function AuditPage() {
         onConfirm={handlePriorityConfirm}
         results={currentAuditResults}
       />
+
+      {/* 评估指导弹窗 */}
+      {showGuidanceModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-2xl font-bold text-blue-600">?</span>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">评估指导</h3>
+              </div>
+              <div className="text-gray-700 leading-relaxed mb-4">
+                {currentGuidance}
+              </div>
+              {currentPenaltyRule && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+                  <div className="text-red-700 font-medium text-sm">
+                    {currentPenaltyRule}
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => setShowGuidanceModal(false)}
+                className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,8 @@ export interface AuditModule {
   subModules: {
     [key: string]: {
       items: AuditItem[];
+      optional?: boolean;           // 是否可选（如验针管理）
+      optionalLabel?: string;       // 可选标签（如"无需验针，不参与评分"）
     };
   };
 }
@@ -29,6 +31,12 @@ export interface AuditItem {
   useDetailScore?: boolean;      // 是否使用新的计分逻辑
   // 特殊反向计分（如模块8的尺寸测量：不选得满分，勾选得一半）
   reverseScoring?: boolean;      // true: 不选得满分，勾选得一半
+  // Flat Knit 专用配置
+  guidance?: string;             // 评估指导建议（问号按钮内容）
+  scoreOptions?: number[];       // 得分选项（如 [0.1, 0, -0.5]）
+  penaltyRule?: string;          // 惩罚规则描述（如"发现花色超标则此项大项为0分"）
+  penaltyItems?: string[];       // 被惩罚的其他项ID列表（当此项被选中时，这些项的得分归零）
+  penaltyOnZeroScore?: boolean;  // 是否在选中0分时触发惩罚（默认是选中>0分时触发）
 }
 
 export interface AuditResult {
@@ -39,6 +47,8 @@ export interface AuditResult {
   subDetailChecks?: { [subDetailId: string]: boolean };
   // 新增：打分项评论
   comment?: string;
+  // Flat Knit 专用：选中的分数值
+  selectedScore?: number;
 }
 
 // 不合格项优先级
@@ -56,6 +66,7 @@ export interface EvaluationRecord {
   evaluatorId: string;
   evalDate: string;
   evalType: '常规审核' | '整改复查' | '随机抽查';
+  factoryType: FactoryType;
   supplierId?: number;
   supplierName?: string;
   orderNo?: string;

@@ -1,6 +1,6 @@
 // AI总结报告生成器
 import { EvaluationRecord, AuditModule } from '../types';
-import { lightWovenModules, lingerieSwimwearModules } from '../data/factoryModules';
+import { lightWovenModules, lingerieSwimwearModules, flatKnitModules } from '../data/factoryModules';
 
 // AI总结报告数据结构
 export interface AISummaryReport {
@@ -20,7 +20,7 @@ export async function generateAISummary(record: EvaluationRecord): Promise<AISum
 }
 
 // 获取所有模块
-const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules];
+const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules, ...flatKnitModules];
 
 // 构建评估数据摘要
 function buildEvaluationSummary(record: EvaluationRecord): string {

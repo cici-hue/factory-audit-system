@@ -37,13 +37,6 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    // Flat Knit 开发中，暂时不可用
-    if (selectedFactoryType === 'flat-knit') {
-      setError('Flat Knit 功能正在开发中，敬请期待...');
-      setLoading(false);
-      return;
-    }
-
     try {
       const success = await login(username, password, selectedFactoryType);
       if (!success) {
@@ -78,18 +71,15 @@ export default function LoginPage() {
                 key={factory.type}
                 type="button"
                 onClick={() => setSelectedFactoryType(factory.type)}
-                disabled={factory.type === 'flat-knit'}
                 className={`
                   flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200
                   ${selectedFactoryType === factory.type 
                     ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/30' 
-                    : factory.type === 'flat-knit'
-                      ? 'bg-white/5 border-white/10 text-slate-500 cursor-not-allowed'
-                      : 'bg-white/5 border-white/20 text-slate-300 hover:bg-white/10 hover:border-white/30'
+                    : 'bg-white/5 border-white/20 text-slate-300 hover:bg-white/10 hover:border-white/30'
                   }
                 `}
               >
-                <div className={`mb-2 ${selectedFactoryType === factory.type ? 'text-white' : factory.type === 'flat-knit' ? 'text-slate-500' : 'text-blue-400'}`}>
+                <div className={`mb-2 ${selectedFactoryType === factory.type ? 'text-white' : 'text-blue-400'}`}>
                   {factory.icon}
                 </div>
                 <span className="text-xs font-medium text-center leading-tight">{factory.label}</span>

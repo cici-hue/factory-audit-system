@@ -1011,12 +1011,370 @@ export const lingerieSwimwearModules: AuditModule[] = [
 // Flat Knit 评估模块（开发中）
 export const flatKnitModules: AuditModule[] = [
   {
-    id: 'developing',
-    name: '开发中',
+    id: 'raw-material',
+    name: '原料检验控制（10分）',
     subModules: {
-      '敬请期待': {
+      '1. 入库检查（共1.5分）': {
         items: [
-          { id: 'dev_1', name: 'Flat Knit 评估内容正在开发中，敬请期待...', score: 0, isKey: false, details: [], comment: '' },
+          { id: 'fk_r1_1', name: '① 核对成分', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
+          { id: 'fk_r1_2', name: '② 核对规格、支数', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
+          { id: 'fk_r1_3', name: '③ 核对颜色及批次（缸号）', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
+          { id: 'fk_r1_4', name: '④ 检查包装', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
+          { id: 'fk_r1_5', name: '⑤ 检查重量', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
+          { id: 'fk_r1_6', name: '⑥ 检查回潮率', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '有检查记录可查得满分。（无记录但是库管人员能现场描述或演示正确的操作流程可得半数分。）' },
+          { id: 'fk_r1_7', name: '⑦ 检查异味', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '有检查记录可查得满分。（无记录但是库管人员能现场描述或演示正确的操作流程可得半数分。）' },
+        ]
+      },
+      '2. 纱线外观检验（共1.5分）': {
+        items: [
+          { id: 'fk_r2_1', name: '① 检查花色', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '项①需准确描述出如何检测花色（拆包检查筒纱外观或织成布片后看布片外观），并给出检查的比例。（能提供织片检查记录或者筒纱花色照片记录，无记录但是描述流程正确可得半数分）。', penaltyRule: '注意：评估员现场需抽查任意两包不同类型纱线，发现花色超标则此大项为0分。' },
+          { id: 'fk_r2_2', name: '② 颜色/缸差（标准光源下比对）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需有标准色样，需有D65光源。' },
+          { id: 'fk_r2_3', name: '③ 纱筒变形、沾污、磨损', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '若无记录但是负责人能够现场演示正确的检验方法，可得半数分，且评估员现场需抽查任意两包不同类型纱线。' },
+          { id: 'fk_r2_4', name: '④ 花色超标', score: 0, isKey: false, details: [], comment: '', scoreOptions: [0], guidance: '', penaltyRule: '若勾选此项，则①②③均不得选择且此大项为0分', penaltyItems: ['fk_r2_1', 'fk_r2_2', 'fk_r2_3'], penaltyOnZeroScore: true },
+        ]
+      },
+      '3. 纱线性能检验（织成试样检验）（共3分）': {
+        items: [
+          { id: 'fk_r3_1', name: '① 每个色组：做首件尺码样（按客户确认样尺寸打样）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供实际的首件样品，或者打样记录。', penaltyRule: '若①勾选0分，则此项大项得0分', penaltyItems: ['fk_r3_2', 'fk_r3_3', 'fk_r3_4', 'fk_r3_5', 'fk_r3_6'], penaltyOnZeroScore: true },
+          { id: 'fk_r3_2', name: '② 每个色组：测试回潮率/尺寸/克重', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供测试记录。' },
+          { id: 'fk_r3_3', name: '③ 每个色组：密度测试（重量与纱支的对照/外观/做工）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供齐码样品或者测试记录。' },
+          { id: 'fk_r3_4', name: '④ 每个色组：纱线整体外观与确认的大货对照外观目测检验', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员需现场对比复检大货与确认的样品。' },
+          { id: 'fk_r3_5', name: '⑤ 每个色组：支数（纱线称重）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需提供检查记录，无记录但是有测试样且能正确描述操作流程（需通过织小片称重或者与确认样品进行核对）可得半数分。' },
+          { id: 'fk_r3_6', name: '⑥ 每个色组：缩水率（织片）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需提供检查记录，无记录但是能正确描述操作过程可得半数分。' },
+        ]
+      },
+      '4. 仓储管理（共2.5分）': {
+        items: [
+          { id: 'fk_r4_1', name: '① 托盘存放不靠墙、不靠窗、不落地', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察，有任何违规即不得分。' },
+          { id: 'fk_r4_2', name: '② 仓储环境管控：避光储存及防潮防霉', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察仓储环境以及是否配备温湿度计和对应的检查记录，有任何违规即不得分。' },
+          { id: 'fk_r4_3', name: '③ 执行先进先出', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需查阅工厂的出入库记录，无记录但是工厂描述正确可得半数分。' },
+          { id: 'fk_r4_4', name: '④ 库存6个月以上的纱线管理', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '需现场检查近一年的纱线出入库记录，是否有6个月以上纱线的使用情况，如有，需提供重新检测的记录，避免发霉、损坏、变色等纱线的使用。' },
+        ]
+      },
+      '5. 络纱过蜡（共1.5分）': {
+        items: [
+          { id: 'fk_r5_1', name: '① 纱线的过蜡工艺确认书（如丝线、金属纱、弹力纱如含尼龙纱等不可过蜡）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '工厂需提供确认工艺书，或者提供络纱过蜡的标准指导文件，否则不得分。' },
+          { id: 'fk_r5_2', name: '② 合格的络纱工艺操作及现场的管理（清洁、有序及产品色生产）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场需观察络纱过蜡的环境和实际操作，检查是否有违规项（如有违规即不得分）。' },
+          { id: 'fk_r5_3', name: '③ 合股工艺操作无混色不均', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察合股操作，如果是外发工厂合股，需提供首批合股纱的编织确认小样。' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'process-design',
+    name: '工艺制版控制（7.5分）',
+    subModules: {
+      '1. 小片织造与密度测算（共2.5分）': {
+        items: [
+          { id: 'fk_p1_1', name: '① 每色用大货纱线按产品组织结构织小片（如20×20cm或12针200针200转，7针100针100转；5针80针80转；3针60针60转的小片）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供用于测试的小片或者记录供评估员参考。' },
+          { id: 'fk_p1_2', name: '② 准确测出1cm纵向转数/横向针数', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '需提供记录，评估员需核实结果是否正确。' },
+          { id: 'fk_p1_3', name: '③ 洗前、洗后尺寸', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供记录，评估员需核实结果是否正确。' },
+          { id: 'fk_p1_4', name: '④ 结合横机特性/成衣外观/后整理因素制定生产工艺单', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供制定的工艺单，评估员需核实是否正确。' },
+          { id: 'fk_p1_5', name: '⑤ 未织小片', score: 0, isKey: false, details: [], comment: '', scoreOptions: [0], guidance: '', penaltyRule: '若勾选此项，则①②③④均不得选择且此大项为0分', penaltyItems: ['fk_p1_1', 'fk_p1_2', 'fk_p1_3', 'fk_p1_4'], penaltyOnZeroScore: true },
+        ]
+      },
+      '2. 全码工艺设计（共1分）': {
+        items: [
+          { id: 'fk_p2_1', name: '① 智能吓数系统生成全码工艺排针图及制版，或人工生成排针图再用恒强系统等软件精准排针制版', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '' },
+          { id: 'fk_p2_2', name: '② 字码（密度）转及收放针无错误', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员需将工艺单与电脑制版进行核对，如有错误即不得分。', penaltyRule: '若②得0分则①不得选且此大项为0分', penaltyItems: ['fk_p2_1'], penaltyOnZeroScore: true },
+        ]
+      },
+      '3. 程序执行（共1分）': {
+        items: [
+          { id: 'fk_p3_1', name: '① 横机织造无系统报错（撞针/漏针）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需现场观察横机编织过程是否有报错，检查织片是否有漏针等系列性疵点，有错误即不得分。' },
+        ]
+      },
+      '4. 克重、尺寸控制（共3分）': {
+        items: [
+          { id: 'fk_p4_1', name: '① 按密度平方和尺寸表算出大货推码克重', score: 1.5, isKey: false, details: [], comment: '', scoreOptions: [1.5, 0], guidance: '需提供全码克重记录及织片下机重量记录、总重量记录。' },
+          { id: 'fk_p4_2', name: '② 织片下机尺寸控制', score: 1.5, isKey: false, details: [], comment: '', scoreOptions: [1.5, 0], guidance: '需提供织片下机尺寸记录，评估员需现场核实产品（如：双梭编织（包芯纱/尼龙）产品通常误差在5%以内，对于棉、棉/腈、腈纶这几种纱线，下机尺寸要求误差2%以内，通常偏小不可超过1cm, 否则洗后极有可能偏小2cm以上）' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'pre-production-meeting',
+    name: '产前会议控制（10分）',
+    subModules: {
+      '1. 参会人员（共2分）': {
+        items: [
+          { id: 'fk_m1_1', name: '① 技术部', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供会议记录，群发短信或者邮件能体现参会人员名单，或者评估员现场参加产前会核实对应的部门人员是否参会得全分。（无记录或者有部门缺席即不得分）。' },
+          { id: 'fk_m1_2', name: '② 质检部', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供会议记录，群发短信或者邮件能体现参会人员名单，或者评估员现场参加产前会核实对应的部门人员是否参会得全分。（无记录或者有部门缺席即不得分）。' },
+          { id: 'fk_m1_3', name: '③ 业务部', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供会议记录，群发短信或者邮件能体现参会人员名单，或者评估员现场参加产前会核实对应的部门人员是否参会得全分。（无记录或者有部门缺席即不得分）。' },
+          { id: 'fk_m1_4', name: '④ 生产部（复杂产品：印花/扎染/烫钻等各工序负责人必须参会）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供会议记录，群发短信或者邮件能体现参会人员名单，或者评估员现场参加产前会核实对应的部门人员是否参会得全分。（无记录或者有部门缺席即不得分）。' },
+        ]
+      },
+      '2. 产前会资料、统一工艺标准（共2分）': {
+        items: [
+          { id: 'fk_m2_1', name: '① 客户确认样', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场核查产前会的资料是否齐全、正确。' },
+          { id: 'fk_m2_2', name: '② 确认意见，明确客户要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场核查产前会的资料是否齐全、正确。' },
+          { id: 'fk_m2_3', name: '③ 产前样（客户确认码及最大码或齐码）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场核查产前会的资料是否齐全、正确。' },
+          { id: 'fk_m2_4', name: '④ 生产工艺单', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场核查产前会的资料是否齐全、正确。' },
+        ]
+      },
+      '3. 技术难点分析与预防措施制定（共5分）': {
+        items: [
+          { id: 'fk_m3_1', name: '① 各部门提出该产品的技术难点/生产重点/潜在质量问题，或找出工艺、尺寸、做工、结构不合理处', score: 3, isKey: false, details: [], comment: '', scoreOptions: [3, 0], guidance: '需提供证明的文件记录（会议记录，群发短信或者邮件），或者现场演示一次正式的产前会供评估员参照检查。' },
+          { id: 'fk_m3_2', name: '② 提出相应的改进建议，研讨并制定预防方案，明确标注需与客户确认的问题并跟踪结果', score: 2, isKey: false, details: [], comment: '', scoreOptions: [2, 0], guidance: '需提供证明的文件记录（会议记录，群发短信或者邮件），或者现场演示一次正式的产前会供评估员参照检查。' },
+        ]
+      },
+      '4. 会议记录执行（共1分）': {
+        items: [
+          { id: 'fk_m4_1', name: '① 记录完整（措施/责任人/时间节点）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供会议记录，纸质版或者生产群里发送的会议记录都可。' },
+          { id: 'fk_m4_2', name: '② 产前样首件随大货同色最后一批下中查出运，封样卡交质量部，本记录保留一年', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'fabric-inspection',
+    name: '织片检验控制（10分）',
+    subModules: {
+      '1. 小片测试（共1.5分）': {
+        items: [
+          { id: 'fk_f1_1', name: '① 织片上机前织小片', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需结合工艺复核此小片。', penaltyRule: '若①得0分，则②不得选择且此大项为0分', penaltyItems: ['fk_f1_2'], penaltyOnZeroScore: true },
+          { id: 'fk_f1_2', name: '② 通过拉密/挂长测试', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '' },
+        ]
+      },
+      '2. 生产测试频次（共1.5分）': {
+        items: [
+          { id: 'fk_f2_1', name: '① 按工艺规定频次做拉密/挂长测试（至少每12小时2次）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需提供测试记录并符合要求可得全分，无记录但是操作工能够正确的描述操作流程可得半数分。' },
+          { id: 'fk_f2_2', name: '② 单股纱换纱后须重新做拉密/挂长测试并调整参数', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需提供测试记录并符合要求可得全分，无记录但是操作工能够正确的描述操作流程可得半数分。' },
+          { id: 'fk_f2_3', name: '③ 更换颜色（缸号）后必须重新做拉密/挂长测试', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需提供测试记录并符合要求可得全分，无记录但是操作工能够正确的描述操作流程可得半数分。' },
+        ]
+      },
+      '3. 横机车间质量管控（共3分）': {
+        items: [
+          { id: 'fk_f3_1', name: '① 密度尺寸检查（及人为回修后测量衣片规格并称重）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场与工艺单进行核对，检查操作是否规范或遗漏。' },
+          { id: 'fk_f3_2', name: '② 下机重量检测（通常误差≤3%）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场与工艺单进行核对，检查操作是否规范或遗漏。' },
+          { id: 'fk_f3_3', name: '③ 不合格品排除并调整横机，系列性问题立即上报', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0.5, 0], guidance: '检查工厂的上报记录，无记录但是检验人员能正确描述问题上报过程，可得半数分。' },
+        ]
+      },
+      '4. 颜色及多色衣片比对（共1分）': {
+        items: [
+          { id: 'fk_f4_1', name: '① 核对及检查颜色', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '现场要有标准样或者彩图供操作工核对，如果无标准样或者未核对则对应项不得分，评估员现场发现错误也不得分。' },
+          { id: 'fk_f4_2', name: '② 提花/间色衣片需与确认样或款式彩图100%比对', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '现场要有标准样或者彩图供操作工核对，如果无标准样或者未核对则对应项不得分，评估员现场发现错误也不得分。' },
+        ]
+      },
+      '5. 专职织片检查（共3分）': {
+        items: [
+          { id: 'fk_f5_1', name: '① 密度、尺寸、重量检查', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场与工艺单进行核对，工厂能提供检查记录或者评估员现场检查操作是否规范或遗漏。' },
+          { id: 'fk_f5_2', name: '② 外观（油污、污渍、编织疵点等）', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场与工艺单进行核对，工厂能提供检查记录或者评估员现场检查操作是否规范或遗漏。' },
+          { id: 'fk_f5_3', name: '③ 罗纹长度、夹档转数、收针次数', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场与工艺单进行核对，工厂能提供检查记录或者评估员现场检查操作是否规范或遗漏。' },
+          { id: 'fk_f5_4', name: '④ 附件检验（领子、腰带等附件排针及密度检查，检查辅线是否适合圆盘机套口/排针）', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场与工艺单进行核对，工厂能提供检查记录或者评估员现场检查操作是否规范或遗漏。' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'seaming-control',
+    name: '缝盘套口控制（10分）',
+    subModules: {
+      '1. 工艺参数执行（共2分）': {
+        items: [
+          { id: 'fk_s1_1', name: '① 机器针型', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供缝合工艺指导书，评估员对照指导书检查大货是否正确，如有错误则对应的项目不得分。' },
+          { id: 'fk_s1_2', name: '② 缝制流程', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供缝合工艺指导书，评估员对照指导书检查大货是否正确，如有错误则对应的项目不得分。' },
+          { id: 'fk_s1_3', name: '③ 缝合密度', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供缝合工艺指导书，评估员对照指导书检查大货是否正确，如有错误则对应的项目不得分。' },
+          { id: 'fk_s1_4', name: '④ 缝合线材材质', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供缝合工艺指导书，评估员对照指导书检查大货是否正确，如有错误则对应的项目不得分。' },
+        ]
+      },
+      '2. 缝线性能要求（共1.5分）': {
+        items: [
+          { id: 'fk_s2_1', name: '① 缝合线与衣片拉伸性、弹性匹配或符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '操作工现场有对缝合部位进行拉伸及强力检查且评估员现场复查大货合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，不满足童装拉力要求倒扣3分）。' },
+          { id: 'fk_s2_2', name: '② 缝合线断裂强力达标，附件附着力满足童装安全要求(如生产童装需看到强力测试设备）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0, -3], guidance: '操作工现场有对缝合部位进行拉伸及强力检查且评估员现场复查大货合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，不满足童装拉力要求倒扣3分）。' },
+          { id: 'fk_s2_3', name: '③ 缝合线颜色匹配或符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员根据工艺单和首件样对大货进行核对。' },
+        ]
+      },
+      '3. 缝合质量要求及检验（共5.5分）': {
+        items: [
+          { id: 'fk_s3_1', name: '① 采用合理的线迹，如线缝拉长率达到130%不断裂（夹圈、袖缝、侧缝具合理的拉伸性，且不断线）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
+          { id: 'fk_s3_2', name: '② 领子缝合圆顺，领位量达标；下摆、袖口等部位弹性符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
+          { id: 'fk_s3_3', name: '③ 大身/袖子/肩型：缝合平直无铲针洞，挂肩收针花严格对齐', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
+          { id: 'fk_s3_4', name: '④ 花型和间色必须对齐或对称；缝份、对位一致且符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
+          { id: 'fk_s3_5', name: '⑤ 检验及套灯（缝合均匀度、每件套灯检查跳、漏针）', score: 3, isKey: false, details: [], comment: '', scoreOptions: [3, 0], guidance: '需套灯的款式遗漏套灯或者套灯检查有疏漏，则套灯对应项不得分。' },
+        ]
+      },
+      '4. 首件检查（共1分）': {
+        items: [
+          { id: 'fk_s4_1', name: '① 首件产品必须：符合工艺单标准', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '缝合车间必须有首件样以及对应的检查记录，评估员需现场检查首件样是否与工艺单相符。' },
+          { id: 'fk_s4_2', name: '② 记录首件的测试及检查结果，并保留首件在此生产小组至生产结束', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '缝合车间必须有首件样以及对应的检查记录，评估员需现场检查首件样是否与工艺单相符。' },
+          { id: 'fk_s4_3', name: '③ 无首件样', score: 0, isKey: false, details: [], comment: '', scoreOptions: [-1], guidance: '', penaltyRule: '若勾选-1分，则①和②不得勾选，且整个大项扣1分', penaltyItems: ['fk_s4_1', 'fk_s4_2'], penaltyOnZeroScore: false },
+        ]
+      }
+    }
+  },
+  {
+    id: 'washing-drying',
+    name: '水洗 & 烘干控制（10分）',
+    subModules: {
+      '1. 首件测试及工艺制定（共3分）': {
+        items: [
+          { id: 'fk_w1_1', name: '① 首件测试调整工艺参数（浸泡/洗涤时间、脱水转速、烘干温度/时间、助剂配比、单缸数量）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '需提供水洗作业指导书或产前样上明确时间、温度、助剂配比、单缸数量等。' },
+          { id: 'fk_w1_2', name: '② 复核尺寸,手感及重量', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '需提供水洗作业指导书或产前样上明确时间、温度、助剂配比、单缸数量等。' },
+          { id: 'fk_w1_3', name: '③ 首件须保留至此产品完成水洗工序', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '需有水洗首件样。' },
+        ]
+      },
+      '2. 过程控制（共4分）': {
+        items: [
+          { id: 'fk_w2_1', name: '① 分缸控制，辅料、印花/烫钻等洗前预处理', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '' },
+          { id: 'fk_w2_2', name: '② 投产前小批量测试，对比确认样：（水洗效果、手感及外观质量、水洗色牢度等）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0.5, 0], guidance: '需提供小批量测试的记录，若无记录但负责人能正确描述小批量测试的流程可得半数分。' },
+          { id: 'fk_w2_3', name: '③ 大货水洗温度、洗涤时间、脱水转速、助剂用量、pH值', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '' },
+          { id: 'fk_w2_4', name: '④ 大货烘干操作：温度、时间、织物反面烘干、烘干中抽测尺寸、充分冷却后取出', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '' },
+        ]
+      },
+      '3. 检查要点与效果比对（共3分）': {
+        items: [
+          { id: 'fk_w3_1', name: '① 每缸检查：尺寸稳定性', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场评估操作是否规范或遗漏，同时与首件样做对比检查大货是否合格。' },
+          { id: 'fk_w3_2', name: '② 每缸检查：手感（柔软、顺滑，无干涩、硬扎等）、颜色（无色差、色花、掉色等）、味道', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场评估操作是否规范或遗漏，同时与首件样做对比检查大货是否合格。' },
+          { id: 'fk_w3_3', name: '③ 每缸检查：外观及水洗效果（无破洞、勾丝、变形、起球等）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场评估操作是否规范或遗漏，同时与首件样做对比检查大货是否合格。' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'button-tag-control',
+    name: '锁眼、钉扣、钉标 & 打结控制（5分）',
+    subModules: {
+      '1. 锁眼、钉扣及标牌准确性（共1分）': {
+        items: [
+          { id: 'fk_b1_1', name: '① 主标、尺码标、水洗标及装饰标等页数及内容正确', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需有钉标、锁钉的作业指导书或者大货标准样，评估员现场抽查大货是否合格。' },
+          { id: 'fk_b1_2', name: '② 锁眼、钉扣及标牌位置符合工艺单要求，且无高温消尖笔定位', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需有钉标、锁钉的作业指导书或者大货标准样，评估员现场抽查大货是否合格。' },
+        ]
+      },
+      '2. 锁眼、钉扣及打结标准（共3分）': {
+        items: [
+          { id: 'fk_b2_1', name: '① 缝线匹配（材质、颜色正确）', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场抽查大货是否合格。' },
+          { id: 'fk_b2_2', name: '② 线头处理干净，打结方式符合客户要求（平结/藏结等）', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场抽查大货是否合格。' },
+          { id: 'fk_b2_3', name: '③ 手工收口牢固', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场抽查大货是否合格。' },
+          { id: 'fk_b2_4', name: '④ 钉扣、锁眼无磨损、开线及松脱', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场抽查大货是否合格。' },
+        ]
+      },
+      '3. 牢固度测试（共1分）': {
+        items: [
+          { id: 'fk_b3_1', name: '① 钉扣、装饰标及附件等需通过3次标准拉力测试不脱落，且符合童装安全要求(童装需有测试仪器）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0, -3], guidance: '评估员现场抽查大货是否合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，童装不符合安全要求倒扣3分）。' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'ironing-control',
+    name: '整烫控制（10分）',
+    subModules: {
+      '1. 工艺制定（共2分）': {
+        items: [
+          { id: 'fk_i1_1', name: '① 根据纱线特性、组织密度等设定熨烫温度、时间及熨烫方式（如轻蒸汽熨烫及加垫布或熨斗底部保护套）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '需提供整烫工艺指导书，明确整烫注意事项（如熨烫温度、时间与方式等）。' },
+          { id: 'fk_i1_2', name: '② 整烫首件样与检验记录留存至产品生产结束', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '现场需有整烫首件样以及检查记录。' },
+        ]
+      },
+      '2. 烫版管理（共1分）': {
+        items: [
+          { id: 'fk_i2_1', name: '① 每码首烫预缩前后测量尺寸', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '需提供预缩前后的尺寸测量记录，无记录但是操作工能准确描述出“烫-放-量-改”流程，可得半数分。' },
+          { id: 'fk_i2_2', name: '② 每款制作专用烫版/烫衣架，清晰标注款号、尺码信息、尺寸度量点等', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场检查，如有缺失即不得分。' },
+        ]
+      },
+      '3. 外观质量（共2分）': {
+        items: [
+          { id: 'fk_i3_1', name: '① 无烫痕、无极光、无蒸汽水印', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场对烫后产品进行抽查是否合格。' },
+          { id: 'fk_i3_2', name: '② 产品平铺存放，避免压痕褶皱', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场对烫后产品进行抽查是否合格。' },
+        ]
+      },
+      '4. 尺寸控制及操作规范（共3分）': {
+        items: [
+          { id: 'fk_i4_1', name: '① 专人测量并记录尺寸，冷却24小时后100%复测（此项也可以在后续的检验工序复核）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0.5, -3], guidance: '需提供尺寸测量记录（复测记录时间需间隔至少1天），且现场有“熨烫产品静置区”；无记录但是检验车间有100%尺寸复测环节可得半数分；缺100%复测倒扣3分。' },
+          { id: 'fk_i4_2', name: '② 不合格品分析原因及改善措施（严禁硬性拉烫改变尺寸）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需现场评估操作是否规范。' },
+          { id: 'fk_i4_3', name: '③ 确保产品抽湿排风', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需现场评估操作是否规范。' },
+        ]
+      },
+      '5. 质量抽查（共2分）': {
+        items: [
+          { id: 'fk_i5_1', name: '① 整烫组长抽查：尺码更换须检查首批产品，按每位烫工抽查至少10%（外观质量及关键部位尺寸）', score: 2, isKey: false, details: [], comment: '', scoreOptions: [2, 0], guidance: '工厂需提供抽查记录且评估员现场能看到有专人对整烫产品进行抽查控制。' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'inspection-control',
+    name: '检验控制（15分）',
+    subModules: {
+      '1. 检验培训及检验流程制定（共1.5分）': {
+        items: [
+          { id: 'fk_j1_1', name: '① 质检主管培训检查员并制定检验流程（强调该款产品的质量要求、潜在风险控制点及流程，如：整烫前照灯检查，整烫后复检，特殊结构需二次整烫定型后三检）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需结合培训记录或制定的检验流程，评估现场大货的实际操作流程是否规范。' },
+          { id: 'fk_j1_2', name: '② 确认标准样须展示在操作车间至产品生产结束', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需有大货对应的标准样在车间展示。' },
+        ]
+      },
+      '2. 检验环境（共1.5分）': {
+        items: [
+          { id: 'fk_j2_1', name: '① 检验台整洁', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场评估对应项是否规范。' },
+          { id: 'fk_j2_2', name: '② 光线符合要求（至少500-750LUX）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场评估对应项是否规范。' },
+          { id: 'fk_j2_3', name: '③ 颜色分开存放', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场评估对应项是否规范。' },
+        ]
+      },
+      '3. 100%检验（共6分）': {
+        items: [
+          { id: 'fk_j3_1', name: '① 按确认样和工艺单要求：检查顺序是否有遗漏（如从上到下、从左到右、翻转检查）', score: 3, isKey: false, details: [], comment: '', scoreOptions: [3, 0], guidance: '评估员现场评估操作是否规范或遗漏。' },
+          { id: 'fk_j3_2', name: '② 尺寸测量（如在前道已100%检查，后道按一定比例抽查，至少10%）', score: 3, isKey: false, details: [], comment: '', scoreOptions: [3, 1.5, 0], guidance: '需提供尺寸测量记录，无记录但评估员现场检查有专人负责100%尺寸测量工序且操作规范，可得半数分。' },
+        ]
+      },
+      '4. 疵点分析及不合格品管理（共2.5分）': {
+        items: [
+          { id: 'fk_j4_1', name: '① 按疵品分类处理（如：原材料疵点；附件/辅料疵点；做工疵点；外观疵点等；整烫、尺寸疵点；唛头/包装/数量/安全问题等）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场评估操作是否规范或遗漏。' },
+          { id: 'fk_j4_2', name: '② 不合格品专区存放，返修品需重新检验', score: 1.5, isKey: false, details: [], comment: '', scoreOptions: [1.5, 0], guidance: '不合格品必须专放且有明确的标识区，评估员现场评估不合格品存放以及返修品操作是否规范。' },
+        ]
+      },
+      '5. 包装前抽检（共2分）': {
+        items: [
+          { id: 'fk_j5_1', name: '① 按客户AQL标准进行最终抽检（注意试身效果检查）', score: 2, isKey: false, details: [], comment: '', scoreOptions: [2, 0], guidance: '需提供抽检记录或报告。' },
+        ]
+      },
+      '6. 质量总结（共1.5分）': {
+        items: [
+          { id: 'fk_j6_1', name: '① 质量主管定期汇总报告，根据所记录的疵点召开质量会议，分析并改善', score: 1.5, isKey: false, details: [], comment: '', scoreOptions: [1.5, 0], guidance: '需提供汇总报告文件或会议记录。' },
+        ]
+      }
+    }
+  },
+  {
+    id: 'packaging-control',
+    name: '包装控制（12.5分）',
+    subModules: {
+      '1. 包装测试（共1.5分）': {
+        items: [
+          { id: 'fk_pa1_1', name: '① 每色每码进行包装测试，确保：成衣无压痕', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场检查大货包装是否合格。' },
+          { id: 'fk_pa1_2', name: '② 胶袋不爆口、产品无滑落', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场检查大货包装是否合格。' },
+          { id: 'fk_pa1_3', name: '③ 每码纸箱重量符合要求，纸箱无变形', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场检查大货包装是否合格。' },
+        ]
+      },
+      '2. 包装培训及标准管理（共3分）': {
+        items: [
+          { id: 'fk_pa2_1', name: '① 全套包装辅料卡', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场需检查对应的资料是否齐全。' },
+          { id: 'fk_pa2_2', name: '② 包装作业指导书、确认包装标准样，保留至生产结束', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场需检查对应的资料是否齐全。' },
+          { id: 'fk_pa2_3', name: '③ 组长按工艺要求培训包装工，按标准方法折叠和包装（外观统一平整、折叠尺寸吻合胶袋尺寸）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员现场评估操作工是否规范。' },
+        ]
+      },
+      '3. 分袋管理（共4分）': {
+        items: [
+          { id: 'fk_pa3_1', name: '① 产品无潮湿、无异味', score: 2, isKey: false, details: [], comment: '', scoreOptions: [2, 1, 0], guidance: '需提供检查记录且评估员需现场抽检大货是否合格，无记录但评估员现场可以看到有工人在实际操作此流程可得半数分。' },
+          { id: 'fk_pa3_2', name: '② 颜色分装、尺码分袋、按搭配分装', score: 2, isKey: false, details: [], comment: '', scoreOptions: [2, 0], guidance: '评估员现场评估操作是否规范。' },
+        ]
+      },
+      '4. 辅料标签管理（共1.5分）': {
+        items: [
+          { id: 'fk_pa4_1', name: '① 包装辅料分发数量需与箱单吻合', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场评估操作是否规范。' },
+          { id: 'fk_pa4_2', name: '② 辅料质量与订单要求吻合（正确的胶袋、条形码、价格吊牌、箱唛等）', score: 0.75, isKey: false, details: [], comment: '', scoreOptions: [0.75, 0], guidance: '评估员现场评估操作是否规范。' },
+        ]
+      },
+      '5. 验针管理（共1.5分）': {
+        items: [
+          { id: 'fk_pa5_1', name: '① 按验针流程操作:按要求定时检测、校准机器', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供机器检测/校准记录。' },
+          { id: 'fk_pa5_2', name: '② 污染物严格分离管理', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0, -3], guidance: '评估员现场评估操作是否规范，缺该项倒扣3分。' },
+          { id: 'fk_pa5_3', name: '③ 九点测试记录及验针报告', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供测试记录与验针报告，评估员现场复核操作是否规范。' },
+        ],
+        optional: true,
+        optionalLabel: '无需验针，不参与评分'
+      },
+      '6. 巡检制度（共1分）': {
+        items: [
+          { id: 'fk_pa6_1', name: '① 包装主管需定期检查，如：辅料质量（包装辅料及产品上的附件）、折叠方法、装箱搭配、数量及重量、潮湿度检测等', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0.5, 0], guidance: '需提供检查记录，无记录但评估员现场可以看到巡检工序，且现场有测潮设备在使用可得半数分。' },
         ]
       }
     }
@@ -1045,7 +1403,7 @@ export function getTotalScore(factoryType: FactoryType): number {
     case 'lingerie-swimwear':
       return 184;
     case 'flat-knit':
-      return 0;
+      return 100;
     default:
       return 177;
   }

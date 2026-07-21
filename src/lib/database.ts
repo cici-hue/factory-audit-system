@@ -436,6 +436,7 @@ export const evaluationService = {
         evaluatorId: record.evaluator_id,
         evalDate: record.eval_date,
         evalType: fromDbEvalType(record.eval_type),
+        factoryType: record.factory_type as FactoryType || 'light-woven',
         supplierId: record.supplier_id ?? undefined,
         supplierName: record.supplier_name ?? undefined,
         customerId: record.customer_id ?? undefined,
@@ -480,6 +481,7 @@ export const evaluationService = {
       evaluatorId: record.evaluator_id,
       evalDate: record.eval_date,
       evalType: fromDbEvalType(record.eval_type),
+      factoryType: record.factory_type as FactoryType || 'light-woven',
       supplierId: record.supplier_id ?? undefined,
       supplierName: record.supplier_name ?? undefined,
       customerId: record.customer_id ?? undefined,
@@ -510,7 +512,8 @@ export const evaluationService = {
         details: value.details || [],
         imagePath: value.imagePath || null,
         subDetailChecks: value.subDetailChecks || {},
-        comment: value.comment || ''
+        comment: value.comment || '',
+        selectedScore: value.selectedScore,
       };
       return acc;
     }, {} as typeof evaluation.results) : {};
@@ -525,6 +528,7 @@ export const evaluationService = {
         evaluator_name: evaluation.evaluator,
         eval_date: evaluation.evalDate,
         eval_type: toDbEvalType(evaluation.evalType),
+        factory_type: evaluation.factoryType,
         supplier_id: evaluation.supplierId ?? null,
         supplier_name: evaluation.supplierName ?? null,
         customer_id: evaluation.customerId ?? null,
@@ -607,6 +611,7 @@ export const evaluationService = {
     if (updates.factoryName !== undefined) supabaseUpdates.factory_name = updates.factoryName;
     if (updates.evalDate !== undefined) supabaseUpdates.eval_date = updates.evalDate;
     if (updates.evalType !== undefined) supabaseUpdates.eval_type = toDbEvalType(updates.evalType);
+    if (updates.factoryType !== undefined) supabaseUpdates.factory_type = updates.factoryType;
     if (updates.supplierId !== undefined) supabaseUpdates.supplier_id = updates.supplierId;
     if (updates.supplierName !== undefined) supabaseUpdates.supplier_name = updates.supplierName;
     if (updates.customerId !== undefined) supabaseUpdates.customer_id = updates.customerId;
@@ -631,7 +636,8 @@ export const evaluationService = {
           // 不保存 base64 图片数据，只保存 Storage URL 或 null
           imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null,
           subDetailChecks: value.subDetailChecks || {},
-          comment: value.comment || ''
+          comment: value.comment || '',
+          selectedScore: value.selectedScore,
         };
         return acc;
       }, {} as typeof updates.results);
@@ -726,7 +732,8 @@ export const draftService = {
           // 不保存 base64 图片数据，只保存 Storage URL 或 null
           imagePath: value.imagePath && value.imagePath.startsWith('http') ? value.imagePath : null,
           subDetailChecks: value.subDetailChecks || {},
-          comment: value.comment || ''
+          comment: value.comment || '',
+          selectedScore: value.selectedScore,
         };
         return acc;
       }, {} as typeof draft.currentAuditResults) : {};

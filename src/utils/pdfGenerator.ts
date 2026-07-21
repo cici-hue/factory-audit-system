@@ -1,4 +1,4 @@
-import { lightWovenModules, lingerieSwimwearModules } from '../data/factoryModules';
+import { lightWovenModules, lingerieSwimwearModules, flatKnitModules } from '../data/factoryModules';
 import { EvaluationRecord, FailedItemPriority, AuditModule, AuditItem } from '../types';
 import { 
   PhotoItem, 
@@ -23,10 +23,11 @@ interface FailedItemInfo {
   subDetails?: { id: string; name: string }[];
   subDetailChecks?: { [key: string]: boolean };
   reverseScoring?: boolean;  // 新增：反向计分标记
+  selectedScore?: number;    // Flat Knit 专用：选中的分数
 }
 
 // 合并所有工厂类型的模块
-const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules];
+const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules, ...flatKnitModules];
 
 // 创建 item ID 到模块信息的映射
 const itemIdToModuleMap = new Map<string, { item: AuditItem; moduleName: string; subModuleName: string }>();
@@ -40,6 +41,12 @@ allModules.forEach(module => {
 
 // 生成小点勾选详情的 HTML
 function generateSubDetailHTML(item: FailedItemInfo): string {
+  // Flat Knit 专用：显示选中的分数
+  if (item.selectedScore !== undefined) {
+    const scoreText = item.selectedScore > 0 ? `得分: ${item.selectedScore}分` : `得分: ${item.selectedScore}分（未达标）`;
+    return `<div class="item-details">${scoreText}</div>`;
+  }
+
   if (!item.useDetailScore || !item.subDetails || item.subDetails.length === 0) {
     return '';
   }
@@ -93,18 +100,34 @@ function collectFailedItems(record: EvaluationRecord): {
   console.log('collectFailedItems - record.results:', record.results);
   console.log('collectFailedItems - record.selectedModules:', record.selectedModules);
 
-  // 只遍历 results 中实际有数据的项
+  const penalizedItemIds = new Set<string>();
+  Object.entries(record.results).forEach(([itemId, result]) => {
+    const moduleInfo = itemIdToModuleMap.get(itemId);
+    if (!moduleInfo) return;
+    const item = moduleInfo.item;
+    if (item.penaltyItems && result.selectedScore !== undefined) {
+      const shouldPenalize = item.penaltyOnZeroScore 
+        ? result.selectedScore === 0 
+        : true;
+      if (shouldPenalize) {
+        item.penaltyItems.forEach(penalizedId => {
+          penalizedItemIds.add(penalizedId);
+        });
+      }
+    }
+  });
+
   Object.entries(record.results).forEach(([itemId, result]) => {
     const moduleInfo = itemIdToModuleMap.get(itemId);
     if (!moduleInfo) return;
 
-    // 检查该模块是否在当前选中的模块中
     if (!record.selectedModules.includes(moduleInfo.moduleName)) return;
 
     const isChecked = result.isChecked;
     const details = result.details || [];
     const comment = result.comment || '';
     const imagePath = result.imagePath || null;
+    const item = moduleInfo.item;
 
     const itemInfo: FailedItemInfo = {
       itemId: itemId,
@@ -115,23 +138,41 @@ function collectFailedItems(record: EvaluationRecord): {
       details: details,
       comment: comment,
       isKey: moduleInfo.item.isKey,
-      // 保存可多选小点的信息
       useDetailScore: moduleInfo.item.useDetailScore,
       subDetails: moduleInfo.item.subDetails,
       subDetailChecks: result.subDetailChecks,
-      reverseScoring: moduleInfo.item.reverseScoring  // 传递反向计分标记
+      reverseScoring: moduleInfo.item.reverseScoring,
+      selectedScore: result.selectedScore,
     };
 
-    if (!isChecked) {
+    const isPenalized = penalizedItemIds.has(itemId);
+
+    let isFlatKnitFailed = false;
+    if (item.scoreOptions && item.scoreOptions.length > 0) {
+      if (isPenalized) {
+        isFlatKnitFailed = false;
+      } else if (item.penaltyOnZeroScore && result.selectedScore === 0) {
+        isFlatKnitFailed = true;
+      } else if (!item.penaltyOnZeroScore && item.penaltyItems && result.selectedScore !== undefined) {
+        isFlatKnitFailed = true;
+      } else if (result.selectedScore !== undefined && result.selectedScore <= 0) {
+        isFlatKnitFailed = true;
+      } else {
+        isFlatKnitFailed = false;
+      }
+    } else {
+      isFlatKnitFailed = !isChecked;
+    }
+
+    if (isFlatKnitFailed) {
       failedItems.push(itemInfo);
 
-      // 收集有照片的不合格项
       if (imagePath) {
         console.log('收集到照片:', itemId, imagePath);
         photoItems.push({
           itemId: itemId,
-          priority: 0, // 稍后设置
-          isUrgent: false, // 稍后设置
+          priority: 0,
+          isUrgent: false,
           moduleName: moduleInfo.moduleName,
           subModuleName: moduleInfo.subModuleName,
           itemName: moduleInfo.item.name,

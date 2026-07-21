@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowUp, ArrowDown, AlertCircle, GripVertical } from 'lucide-react';
 import { AuditItem, AuditResult, FailedItemPriority, AuditModule } from '../types';
-import { lightWovenModules, lingerieSwimwearModules } from '../data/factoryModules';
+import { lightWovenModules, lingerieSwimwearModules, flatKnitModules } from '../data/factoryModules';
 
 interface FailedItem {
   itemId: string;
@@ -12,7 +12,7 @@ interface FailedItem {
 }
 
 // 获取所有模块
-const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules];
+const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules, ...flatKnitModules];
 
 // 创建 item ID 到模块信息的映射
 const itemIdToModuleMap = new Map<string, { item: AuditItem; moduleName: string; subModuleName: string }>();
@@ -40,24 +40,61 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
     if (!isOpen) return;
 
     const failedItems: FailedItem[] = [];
-    
-    // 只遍历 results 中实际有数据的项，而不是所有模块
+
+    const penalizedItemIds = new Set<string>();
     Object.entries(results).forEach(([itemId, result]) => {
-      if (result && !result.isChecked) {
-        const moduleInfo = itemIdToModuleMap.get(itemId);
-        if (moduleInfo) {
-          failedItems.push({
-            itemId,
-            item: moduleInfo.item,
-            result,
-            moduleName: moduleInfo.moduleName,
-            subModuleName: moduleInfo.subModuleName
+      const moduleInfo = itemIdToModuleMap.get(itemId);
+      if (!moduleInfo) return;
+      const item = moduleInfo.item;
+      if (item.penaltyItems && result.selectedScore !== undefined) {
+        const shouldPenalize = item.penaltyOnZeroScore 
+          ? result.selectedScore === 0 
+          : true;
+        if (shouldPenalize) {
+          item.penaltyItems.forEach(penalizedId => {
+            penalizedItemIds.add(penalizedId);
           });
         }
       }
     });
+    
+    Object.entries(results).forEach(([itemId, result]) => {
+      if (!result) return;
+      
+      const moduleInfo = itemIdToModuleMap.get(itemId);
+      if (!moduleInfo) return;
+      
+      const item = moduleInfo.item;
+      const isPenalized = penalizedItemIds.has(itemId);
 
-    // 按分值降序排序（分值高的在前）作为初始排序
+      let isFailed = false;
+      if (item.scoreOptions && item.scoreOptions.length > 0) {
+        if (isPenalized) {
+          isFailed = false;
+        } else if (item.penaltyOnZeroScore && result.selectedScore === 0) {
+          isFailed = true;
+        } else if (!item.penaltyOnZeroScore && item.penaltyItems && result.selectedScore !== undefined) {
+          isFailed = true;
+        } else if (result.selectedScore !== undefined && result.selectedScore <= 0) {
+          isFailed = true;
+        } else {
+          isFailed = false;
+        }
+      } else {
+        isFailed = !result.isChecked;
+      }
+
+      if (isFailed) {
+        failedItems.push({
+          itemId,
+          item: moduleInfo.item,
+          result,
+          moduleName: moduleInfo.moduleName,
+          subModuleName: moduleInfo.subModuleName
+        });
+      }
+    });
+
     failedItems.sort((a, b) => b.item.score - a.item.score);
     
     setItems(failedItems);
