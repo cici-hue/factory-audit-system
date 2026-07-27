@@ -2,6 +2,8 @@
 export interface AuditModule {
   id: string;
   name: string;
+  skippable?: boolean;              // 整个模块是否可标记为无需参与评分
+  skippableLabel?: string;          // 模块可选标签
   subModules: {
     [key: string]: {
       items: AuditItem[];

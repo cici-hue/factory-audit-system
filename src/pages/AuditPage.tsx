@@ -64,6 +64,7 @@ export default function AuditPage() {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [expandedSubModules, setExpandedSubModules] = useState<Set<string>>(new Set());
   const [skippedSubModules, setSkippedSubModules] = useState<Set<string>>(new Set());
+  const [skippedModules, setSkippedModules] = useState<Set<string>>(new Set());
   const [customers] = useState<Customer[]>(customerList);
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
 
@@ -492,12 +493,19 @@ export default function AuditPage() {
 
   // 计算当前得分（支持新的可多选计分逻辑）
   const { currentScore, percentage, moduleScores } = useMemo(() => {
-    let score = 0;
+    let earnedScore = 0;
+    let maxPossibleScore = 0;
     const modScores: { [key: string]: number } = {};
 
     auditModules.forEach(mod => {
       if (!selectedModules.includes(mod.name)) return;
-      let modScore = 0;
+      // 跳过被标记为无需参与的模块（分子分母都不参与）
+      if (skippedModules.has(mod.id)) {
+        modScores[mod.name] = 0;
+        return;
+      }
+      let modEarned = 0;
+      let modMax = 0;
 
       Object.values(mod.subModules).forEach(subMod => {
           const penalizedItemIds = new Set<string>();
@@ -523,15 +531,22 @@ export default function AuditPage() {
 
             if (item.scoreOptions && item.scoreOptions.length > 0) {
               const selectedScore = result.selectedScore;
+              // 分母贡献：该项的最大可能得分（scoreOptions中的最大值）
+              const maxOpt = Math.max(...item.scoreOptions, 0);
+              modMax += maxOpt;
+              maxPossibleScore += maxOpt;
               if (selectedScore !== undefined && !isPenalized) {
-                modScore += selectedScore;
-                score += selectedScore;
+                modEarned += selectedScore;
+                earnedScore += selectedScore;
               }
             } else if (item.useDetailScore && item.subDetails && item.subDetails.length > 0) {
+            // 分母贡献
+            modMax += item.score;
+            maxPossibleScore += item.score;
             // 如果主项被勾选，直接得满分
             if (result.isChecked) {
-              modScore += item.detailScore || item.score;
-              score += item.detailScore || item.score;
+              modEarned += item.detailScore || item.score;
+              earnedScore += item.detailScore || item.score;
             } else {
               // 主项未勾选，根据小点勾选情况计分
               const subDetailChecks = result.subDetailChecks || {};
@@ -543,64 +558,70 @@ export default function AuditPage() {
               if (isSizeMeasurement) {
                 // 尺寸测量项：勾选小点=有遗漏=一半分，不勾选=0分
                 if (checkedCount > 0) {
-                  modScore += item.partialScore || (item.score / 2);
-                  score += item.partialScore || (item.score / 2);
+                  modEarned += item.partialScore || (item.score / 2);
+                  earnedScore += item.partialScore || (item.score / 2);
                 }
               } else {
                 // 普通可多选项
                 if (checkedCount === totalCount) {
                   // 全选：得满分
-                  modScore += item.detailScore || item.score;
-                  score += item.detailScore || item.score;
+                  modEarned += item.detailScore || item.score;
+                  earnedScore += item.detailScore || item.score;
                 } else if (checkedCount > 0) {
                   // 部分选择：得一半分
-                  modScore += item.partialScore || (item.score / 2);
-                  score += item.partialScore || (item.score / 2);
+                  modEarned += item.partialScore || (item.score / 2);
+                  earnedScore += item.partialScore || (item.score / 2);
                 }
               }
               // 全不选：不得分
             }
           } else if (item.reverseScoring && item.subDetails) {
+            // 分母贡献
+            modMax += item.score;
+            maxPossibleScore += item.score;
             // 反向计分（如模块8的尺寸测量）：不选得满分，勾选得一半
             const subDetailChecks = result.subDetailChecks || {};
             const checkedCount = item.subDetails.filter(sub => subDetailChecks[sub.id]).length;
             
             if (checkedCount === 0) {
               // 全不选：得满分
-              modScore += item.detailScore || item.score;
-              score += item.detailScore || item.score;
+              modEarned += item.detailScore || item.score;
+              earnedScore += item.detailScore || item.score;
             } else {
               // 有任何勾选：得一半分
-              modScore += item.partialScore || (item.score / 2);
-              score += item.partialScore || (item.score / 2);
+              modEarned += item.partialScore || (item.score / 2);
+              earnedScore += item.partialScore || (item.score / 2);
             }
           } else {
+            // 分母贡献
+            modMax += item.score;
+            maxPossibleScore += item.score;
             // 普通计分逻辑
             if (result.isChecked) {
-              modScore += item.score;
-              score += item.score;
+              modEarned += item.score;
+              earnedScore += item.score;
             }
           }
         });
       });
 
-      modScores[mod.name] = Math.max(modScore, 0);
+      modScores[mod.name] = Math.max(modEarned, 0);
     });
 
-    const finalScore = Object.values(modScores).reduce((sum, s) => sum + s, 0);
-    // 如果是整改复查，使用累加式得分计算
-    let finalPercentage = (finalScore / TOTAL_SCORE) * 100;
+    // 按比例得分：百分比 = earnedScore / maxPossibleScore * 100
+    const finalScore = Math.max(earnedScore, 0);
+    let finalPercentage = maxPossibleScore > 0 ? (finalScore / maxPossibleScore) * 100 : 0;
     
     if (evalType === '整改复查' && lastEvaluation) {
-      // 累加得分：上次得分 + 本次整改复查得分
-      const lastScore = (lastEvaluation.overallPercent / 100) * TOTAL_SCORE;
-      const currentRectificationScore = finalScore;
-      const accumulatedScore = lastScore + currentRectificationScore;
-      finalPercentage = (accumulatedScore / TOTAL_SCORE) * 100;
-      console.log('整改复查累加得分计算:', {
-        lastScore,
-        currentRectificationScore,
-        accumulatedScore,
+      // 累加得分：上次得分百分比 + 本次整改复查得分百分比
+      const lastPercent = lastEvaluation.overallPercent || 0;
+      const currentPercent = finalPercentage;
+      const accumulatedPercent = lastPercent + currentPercent;
+      finalPercentage = Math.min(accumulatedPercent, 100);
+      console.log('整改复查累加百分比计算:', {
+        lastPercent,
+        currentPercent,
+        accumulatedPercent,
         finalPercentage
       });
     }
@@ -610,7 +631,7 @@ export default function AuditPage() {
       percentage: finalPercentage,
       moduleScores: modScores,
     };
-  }, [currentAuditResults, selectedModules, auditModules, TOTAL_SCORE, evalType, lastEvaluation]);
+  }, [currentAuditResults, selectedModules, auditModules, TOTAL_SCORE, evalType, lastEvaluation, skippedModules]);
 
   // 处理复选框变更（主项）
   const handleCheckChange = (itemId: string, checked: boolean, item?: any) => {
@@ -1080,15 +1101,25 @@ export default function AuditPage() {
     const totals: Record<string, number> = {};
     auditModules.forEach((mod) => {
       let total = 0;
+      // 跳过的模块不计算总分
+      if (skippedModules.has(mod.id)) {
+        totals[mod.name] = 0;
+        return;
+      }
       Object.values(mod.subModules).forEach((sub) => {
         sub.items.forEach((item) => {
-          total += item.score;
+          if (item.scoreOptions && item.scoreOptions.length > 0) {
+            // flat-knit 计分项用最大可能得分
+            total += Math.max(...item.scoreOptions, 0);
+          } else {
+            total += item.score;
+          }
         });
       });
       totals[mod.name] = total;
     });
     return totals;
-  }, []);
+  }, [skippedModules]);
 
   const modulePercentages = useMemo(() => {
     const perc: Record<string, number> = {};
@@ -1538,25 +1569,61 @@ export default function AuditPage() {
           .map(module => (
             <div key={module.id} className="bg-white rounded-2xl shadow-sm border overflow-hidden">
               {/* 模块标题 */}
-              <button
-                onClick={() => toggleModule(module.id)}
-                className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg font-semibold">{module.name}</span>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-lg">
-                    {factoryType === 'flat-knit' 
-                      ? `${(moduleScores[module.name] ?? 0).toFixed(2)}分` 
-                      : `${(modulePercentages[module.name] ?? 0).toFixed(1)}%`
-                    }
-                  </span>
+              <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={() => toggleModule(module.id)}
+                    className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                  >
+                    <span className={`text-lg font-semibold ${skippedModules.has(module.id) ? 'text-slate-400 line-through' : ''}`}>{module.name}</span>
+                    {!skippedModules.has(module.id) && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-lg">
+                        {factoryType === 'flat-knit' 
+                          ? `${(moduleScores[module.name] ?? 0).toFixed(2)}分` 
+                          : `${(modulePercentages[module.name] ?? 0).toFixed(1)}%`
+                        }
+                      </span>
+                    )}
+                    {skippedModules.has(module.id) && (
+                      <span className="px-2 py-1 bg-slate-200 text-slate-500 text-sm rounded-lg">
+                        已跳过
+                      </span>
+                    )}
+                  </button>
+                  {module.skippable && factoryType === 'flat-knit' && (
+                    <label className="flex items-center gap-2 cursor-pointer px-2 py-1 rounded hover:bg-slate-100">
+                      <input
+                        type="checkbox"
+                        checked={skippedModules.has(module.id)}
+                        onChange={(e) => {
+                          const newSkipped = new Set(skippedModules);
+                          if (e.target.checked) {
+                            newSkipped.add(module.id);
+                            // 勾选后自动收起
+                            if (expandedModules.has(module.id)) {
+                              const newExpanded = new Set(expandedModules);
+                              newExpanded.delete(module.id);
+                              setExpandedModules(newExpanded);
+                            }
+                          } else {
+                            newSkipped.delete(module.id);
+                          }
+                          setSkippedModules(newSkipped);
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-600">{module.skippableLabel}</span>
+                    </label>
+                  )}
                 </div>
-                {expandedModules.has(module.id) ? (
-                  <ChevronUp className="w-5 h-5 text-slate-400" />
-                ) : (
-                  <ChevronDown className="w-5 h-5 text-slate-400" />
-                )}
-              </button>
+                <button onClick={() => toggleModule(module.id)} className="hover:opacity-70">
+                  {expandedModules.has(module.id) ? (
+                    <ChevronUp className="w-5 h-5 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                  )}
+                </button>
+              </div>
 
               {/* 子模块列表 */}
               {expandedModules.has(module.id) && (
@@ -1746,7 +1813,14 @@ export default function AuditPage() {
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between flex-wrap gap-2">
                                           <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-medium">{item.name}</span>
+                                            <span className={item.isKey || item.scoreOptions?.some(s => s < 0) ? 'text-red-600 font-medium' : 'font-medium'}>
+                                              {item.name}
+                                            </span>
+                                            {(item.isKey || item.scoreOptions?.some(s => s < 0)) && (
+                                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">
+                                                关键项
+                                              </span>
+                                            )}
                                             {lastStatus && lastStatus !== '' && (
                                               <span
                                                 className={`text-xs ${

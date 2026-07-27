@@ -1,4 +1,4 @@
-import { AuditModule, FactoryType, AuditItem } from '../types';
+﻿import { AuditModule, FactoryType, AuditItem } from '../types';
 
 // Light Woven 评估模块（现有内容）
 export const lightWovenModules: AuditModule[] = [
@@ -1013,6 +1013,7 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'raw-material',
     name: '原料检验控制（10分）',
+    skippable: false,
     subModules: {
       '1. 入库检查（共1.5分）': {
         items: [
@@ -1021,8 +1022,8 @@ export const flatKnitModules: AuditModule[] = [
           { id: 'fk_r1_3', name: '③ 核对颜色及批次（缸号）', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
           { id: 'fk_r1_4', name: '④ 检查包装', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
           { id: 'fk_r1_5', name: '⑤ 检查重量', score: 0.1, isKey: false, details: [], comment: '', scoreOptions: [0.1, 0] },
-          { id: 'fk_r1_6', name: '⑥ 检查回潮率', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '有检查记录可查得满分。（无记录但是库管人员能现场描述或演示正确的操作流程可得半数分。）' },
-          { id: 'fk_r1_7', name: '⑦ 检查异味', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '有检查记录可查得满分。（无记录但是库管人员能现场描述或演示正确的操作流程可得半数分。）' },
+          { id: 'fk_r1_6', name: '⑥ 检查回潮率', score: 0.5, isKey: true, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '有检查记录可查得满分。（无记录但是库管人员能现场描述或演示正确的操作流程可得半数分。）' },
+          { id: 'fk_r1_7', name: '⑦ 检查异味', score: 0.5, isKey: true, details: [], comment: '', scoreOptions: [0.5, 0.25, 0], guidance: '有检查记录可查得满分。（无记录但是库管人员能现场描述或演示正确的操作流程可得半数分。）' },
         ]
       },
       '2. 纱线外观检验（共1.5分）': {
@@ -1063,6 +1064,7 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'process-design',
     name: '工艺制版控制（7.5分）',
+    skippable: false,
     subModules: {
       '1. 小片织造与密度测算（共2.5分）': {
         items: [
@@ -1095,6 +1097,7 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'pre-production-meeting',
     name: '产前会议控制（10分）',
+    skippable: false,
     subModules: {
       '1. 参会人员（共2分）': {
         items: [
@@ -1129,6 +1132,8 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'fabric-inspection',
     name: '织片检验控制（10分）',
+    skippable: true,
+    skippableLabel: '无需织片检验，不参与评分',
     subModules: {
       '1. 小片测试（共1.5分）': {
         items: [
@@ -1169,6 +1174,8 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'seaming-control',
     name: '缝盘套口控制（10分）',
+    skippable: true,
+    skippableLabel: '无需缝盘套口，不参与评分',
     subModules: {
       '1. 工艺参数执行（共2分）': {
         items: [
@@ -1181,7 +1188,7 @@ export const flatKnitModules: AuditModule[] = [
       '2. 缝线性能要求（共1.5分）': {
         items: [
           { id: 'fk_s2_1', name: '① 缝合线与衣片拉伸性、弹性匹配或符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '操作工现场有对缝合部位进行拉伸及强力检查且评估员现场复查大货合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，不满足童装拉力要求倒扣3分）。' },
-          { id: 'fk_s2_2', name: '② 缝合线断裂强力达标，附件附着力满足童装安全要求(如生产童装需看到强力测试设备）', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0, -3], guidance: '操作工现场有对缝合部位进行拉伸及强力检查且评估员现场复查大货合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，不满足童装拉力要求倒扣3分）。' },
+          { id: 'fk_s2_2', name: '② 缝合线断裂强力达标，附件附着力满足童装安全要求(如生产童装需看到强力测试设备）', score: 0.5, isKey: true, details: [], comment: '', scoreOptions: [0.5, 0, -3], guidance: '操作工现场有对缝合部位进行拉伸及强力检查且评估员现场复查大货合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，不满足童装拉力要求倒扣3分）。' },
           { id: 'fk_s2_3', name: '③ 缝合线颜色匹配或符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员根据工艺单和首件样对大货进行核对。' },
         ]
       },
@@ -1191,7 +1198,7 @@ export const flatKnitModules: AuditModule[] = [
           { id: 'fk_s3_2', name: '② 领子缝合圆顺，领位量达标；下摆、袖口等部位弹性符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
           { id: 'fk_s3_3', name: '③ 大身/袖子/肩型：缝合平直无铲针洞，挂肩收针花严格对齐', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
           { id: 'fk_s3_4', name: '④ 花型和间色必须对齐或对称；缝份、对位一致且符合工艺要求', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '评估员现场观察操作工操作是否规范或遗漏，同时对大货进行抽检是否合格。' },
-          { id: 'fk_s3_5', name: '⑤ 检验及套灯（缝合均匀度、每件套灯检查跳、漏针）', score: 3, isKey: false, details: [], comment: '', scoreOptions: [3, 0], guidance: '需套灯的款式遗漏套灯或者套灯检查有疏漏，则套灯对应项不得分。' },
+          { id: 'fk_s3_5', name: '⑤ 检验及套灯（缝合均匀度、每件套灯检查跳、漏针）', score: 3, isKey: true, details: [], comment: '', scoreOptions: [3, 0], guidance: '需套灯的款式遗漏套灯或者套灯检查有疏漏，则套灯对应项不得分。' },
         ]
       },
       '4. 首件检查（共1分）': {
@@ -1206,6 +1213,8 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'washing-drying',
     name: '水洗 & 烘干控制（10分）',
+    skippable: true,
+    skippableLabel: '无需水洗烘干，不参与评分',
     subModules: {
       '1. 首件测试及工艺制定（共3分）': {
         items: [
@@ -1234,6 +1243,8 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'button-tag-control',
     name: '锁眼、钉扣、钉标 & 打结控制（5分）',
+    skippable: true,
+    skippableLabel: '无需锁眼钉扣，不参与评分',
     subModules: {
       '1. 锁眼、钉扣及标牌准确性（共1分）': {
         items: [
@@ -1251,7 +1262,7 @@ export const flatKnitModules: AuditModule[] = [
       },
       '3. 牢固度测试（共1分）': {
         items: [
-          { id: 'fk_b3_1', name: '① 钉扣、装饰标及附件等需通过3次标准拉力测试不脱落，且符合童装安全要求(童装需有测试仪器）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0, -3], guidance: '评估员现场抽查大货是否合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，童装不符合安全要求倒扣3分）。' },
+          { id: 'fk_b3_1', name: '① 钉扣、装饰标及附件等需通过3次标准拉力测试不脱落，且符合童装安全要求(童装需有测试仪器）', score: 1, isKey: true, details: [], comment: '', scoreOptions: [1, 0, -3], guidance: '评估员现场抽查大货是否合格（如生产童装，现场需有拉力测试仪器且评估员现场抽测合格；如果现场无仪器，但工厂需提供有资质的三方测试报告，童装不符合安全要求倒扣3分）。' },
         ]
       }
     }
@@ -1259,6 +1270,8 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'ironing-control',
     name: '整烫控制（10分）',
+    skippable: true,
+    skippableLabel: '无需整烫，不参与评分',
     subModules: {
       '1. 工艺制定（共2分）': {
         items: [
@@ -1280,7 +1293,7 @@ export const flatKnitModules: AuditModule[] = [
       },
       '4. 尺寸控制及操作规范（共3分）': {
         items: [
-          { id: 'fk_i4_1', name: '① 专人测量并记录尺寸，冷却24小时后100%复测（此项也可以在后续的检验工序复核）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0.5, -3], guidance: '需提供尺寸测量记录（复测记录时间需间隔至少1天），且现场有“熨烫产品静置区”；无记录但是检验车间有100%尺寸复测环节可得半数分；缺100%复测倒扣3分。' },
+          { id: 'fk_i4_1', name: '① 专人测量并记录尺寸，冷却24小时后100%复测（此项也可以在后续的检验工序复核）', score: 1, isKey: true, details: [], comment: '', scoreOptions: [1, 0.5, -3], guidance: '需提供尺寸测量记录（复测记录时间需间隔至少1天），且现场有“熨烫产品静置区”；无记录但是检验车间有100%尺寸复测环节可得半数分；缺100%复测倒扣3分。' },
           { id: 'fk_i4_2', name: '② 不合格品分析原因及改善措施（严禁硬性拉烫改变尺寸）', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需现场评估操作是否规范。' },
           { id: 'fk_i4_3', name: '③ 确保产品抽湿排风', score: 1, isKey: false, details: [], comment: '', scoreOptions: [1, 0], guidance: '评估员需现场评估操作是否规范。' },
         ]
@@ -1295,6 +1308,8 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'inspection-control',
     name: '检验控制（15分）',
+    skippable: true,
+    skippableLabel: '无需检验，不参与评分',
     subModules: {
       '1. 检验培训及检验流程制定（共1.5分）': {
         items: [
@@ -1336,6 +1351,7 @@ export const flatKnitModules: AuditModule[] = [
   {
     id: 'packaging-control',
     name: '包装控制（12.5分）',
+    skippable: false,
     subModules: {
       '1. 包装测试（共1.5分）': {
         items: [
@@ -1366,7 +1382,7 @@ export const flatKnitModules: AuditModule[] = [
       '5. 验针管理（共1.5分）': {
         items: [
           { id: 'fk_pa5_1', name: '① 按验针流程操作:按要求定时检测、校准机器', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供机器检测/校准记录。' },
-          { id: 'fk_pa5_2', name: '② 污染物严格分离管理', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0, -3], guidance: '评估员现场评估操作是否规范，缺该项倒扣3分。' },
+          { id: 'fk_pa5_2', name: '② 污染物严格分离管理', score: 0.5, isKey: true, details: [], comment: '', scoreOptions: [0.5, 0, -3], guidance: '评估员现场评估操作是否规范，缺该项倒扣3分。' },
           { id: 'fk_pa5_3', name: '③ 九点测试记录及验针报告', score: 0.5, isKey: false, details: [], comment: '', scoreOptions: [0.5, 0], guidance: '需提供测试记录与验针报告，评估员现场复核操作是否规范。' },
         ],
         optional: true,
