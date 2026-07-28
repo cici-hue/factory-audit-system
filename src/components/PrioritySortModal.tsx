@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { X, ArrowUp, ArrowDown, AlertCircle, GripVertical } from 'lucide-react';
 import { AuditItem, AuditResult, FailedItemPriority, AuditModule } from '../types';
 import { lightWovenModules, lingerieSwimwearModules, flatKnitModules } from '../data/factoryModules';
+import { useApp } from '../context/AppContext';
+import { t, TranslationKey } from '../i18n/translations';
+import { getModuleDisplayName, getSubModuleDisplayName, getItemDisplayName } from '../utils/moduleTranslations';
 
 interface FailedItem {
   itemId: string;
@@ -32,6 +35,8 @@ interface PrioritySortModalProps {
 }
 
 export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: PrioritySortModalProps) {
+  const { language } = useApp();
+  const tr = (key: TranslationKey) => t(language, key);
   const [items, setItems] = useState<FailedItem[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -159,9 +164,9 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
         {/* 头部 */}
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">不合格项优先级排序</h2>
+            <h2 className="text-xl font-bold text-gray-900">{tr('audit.priority.title')}</h2>
             <p className="text-sm text-gray-500 mt-1">
-              请调整整改优先级，前 <span className="text-red-600 font-semibold">10项</span> 将归为"急需整改项"
+              {tr('audit.priority.subtitle', { n: 10 })}
             </p>
           </div>
           <button
@@ -175,14 +180,14 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
         {/* 工具栏 */}
         <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4">
           <span className="text-sm text-gray-600">
-            共 <span className="font-semibold">{items.length}</span> 项不合格
+            {tr('audit.priority.totalCount', { n: items.length })}
           </span>
           <div className="flex-1"></div>
           <button
             onClick={sortByScore}
             className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            按分值自动排序
+            {tr('audit.priority.autoSort')}
           </button>
         </div>
 
@@ -216,24 +221,24 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-gray-900 truncate">
-                      {item.moduleName} - {item.subModuleName}
+                      {getModuleDisplayName(item.moduleName, language)} - {getSubModuleDisplayName(item.subModuleName, language)}
                     </span>
                     <span className={`px-2 py-0.5 text-xs rounded-full ${
                       index < 10
                         ? 'bg-red-100 text-red-700'
                         : 'bg-gray-200 text-gray-600'
                     }`}>
-                      {index < 10 ? '急需' : '一般'}
+                      {index < 10 ? tr('audit.priority.urgent') : tr('audit.priority.general')}
                     </span>
                   </div>
                   <div className="text-sm text-gray-700">
-                    {item.item.name}
+                    {getItemDisplayName(item.item.name, language)}
                   </div>
                   <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                    <span>分值: {item.item.score}分</span>
+                    <span>{tr('priority.scoreLabel')}: {item.item.score}{tr('audit.scoreSuffix')}</span>
                     {item.result.details && item.result.details.length > 0 && (
                       <span className="truncate">
-                        详情: {item.result.details.join(', ')}
+                        {tr('priority.detailsLabel')}: {item.result.details.join(', ')}
                       </span>
                     )}
                   </div>
@@ -245,7 +250,7 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
                     onClick={() => moveToTop(index)}
                     disabled={index === 0}
                     className="p-1.5 hover:bg-white rounded transition-colors disabled:opacity-30"
-                    title="置顶"
+                    title={tr('priority.moveTop')}
                   >
                     <ArrowUp className="w-4 h-4" />
                   </button>
@@ -253,7 +258,7 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
                     onClick={() => moveUp(index)}
                     disabled={index === 0}
                     className="p-1.5 hover:bg-white rounded transition-colors disabled:opacity-30"
-                    title="上移"
+                    title={tr('priority.moveUp')}
                   >
                     <ArrowUp className="w-4 h-4" />
                   </button>
@@ -261,7 +266,7 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
                     onClick={() => moveDown(index)}
                     disabled={index === items.length - 1}
                     className="p-1.5 hover:bg-white rounded transition-colors disabled:opacity-30"
-                    title="下移"
+                    title={tr('priority.moveDown')}
                   >
                     <ArrowDown className="w-4 h-4" />
                   </button>
@@ -269,7 +274,7 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
                     onClick={() => moveToBottom(index)}
                     disabled={index === items.length - 1}
                     className="p-1.5 hover:bg-white rounded transition-colors disabled:opacity-30"
-                    title="置底"
+                    title={tr('priority.moveBottom')}
                   >
                     <ArrowDown className="w-4 h-4" />
                   </button>
@@ -281,7 +286,7 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
           {items.length === 0 && (
             <div className="text-center py-12 text-gray-500">
               <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>没有不合格项需要排序</p>
+              <p>{tr('priority.emptyMessage')}</p>
             </div>
           )}
         </div>
@@ -290,21 +295,21 @@ export function PrioritySortModal({ isOpen, onClose, onConfirm, results }: Prior
         <div className="p-6 border-t bg-gray-50 flex items-center justify-between">
           <div className="text-sm text-gray-500">
             <span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-2"></span>
-            前10项为"急需整改项"，其余为"一般整改项"
+            {tr('audit.priority.urgentNote')}
           </div>
           <div className="flex gap-3">
             <button
               onClick={onClose}
               className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              取消
+              {tr('audit.cancel')}
             </button>
             <button
               onClick={handleConfirm}
               disabled={items.length === 0}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              保存并生成报告
+              {tr('audit.saveAndGenerate')}
             </button>
           </div>
         </div>

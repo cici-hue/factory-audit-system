@@ -1,44 +1,54 @@
-// 评估模块数据类型
+// Audit module data type
 export interface AuditModule {
   id: string;
   name: string;
-  skippable?: boolean;              // 整个模块是否可标记为无需参与评分
-  skippableLabel?: string;          // 模块可选标签
+  nameEn?: string;                   // English name
+  skippable?: boolean;              // Whether the whole module can be marked as not participating in scoring
+  skippableLabel?: string;          // Module optional label
+  skippableLabelEn?: string;        // English module optional label
   subModules: {
     [key: string]: {
+      nameEn?: string;              // English sub-module name
       items: AuditItem[];
-      optional?: boolean;           // 是否可选（如验针管理）
-      optionalLabel?: string;       // 可选标签（如"无需验针，不参与评分"）
+      optional?: boolean;           // Whether optional (e.g. needle inspection)
+      optionalLabel?: string;       // Optional label (e.g. "No needle inspection required, not scored")
+      optionalLabelEn?: string;     // English optional label
     };
   };
 }
 
-// 可多选小点配置
+// Multi-select sub-detail config
 export interface SubDetailItem {
   id: string;
   name: string;
+  nameEn?: string;                  // English sub-detail name
 }
 
 export interface AuditItem {
   id: string;
   name: string;
+  nameEn?: string;                  // English name
   score: number;
   isKey: boolean;
   details: string[];
+  detailsEn?: string[];             // English details
   comment: string;
-  // 新的可多选配置
-  subDetails?: SubDetailItem[];  // 可多选的小点列表
-  detailScore?: number;          // 小点全选时的得分（主项勾选时）
-  partialScore?: number;         // 小点部分选中时的得分
-  useDetailScore?: boolean;      // 是否使用新的计分逻辑
-  // 特殊反向计分（如模块8的尺寸测量：不选得满分，勾选得一半）
-  reverseScoring?: boolean;      // true: 不选得满分，勾选得一半
-  // Flat Knit 专用配置
-  guidance?: string;             // 评估指导建议（问号按钮内容）
-  scoreOptions?: number[];       // 得分选项（如 [0.1, 0, -0.5]）
-  penaltyRule?: string;          // 惩罚规则描述（如"发现花色超标则此项大项为0分"）
-  penaltyItems?: string[];       // 被惩罚的其他项ID列表（当此项被选中时，这些项的得分归零）
-  penaltyOnZeroScore?: boolean;  // 是否在选中0分时触发惩罚（默认是选中>0分时触发）
+  commentEn?: string;               // English comment
+  // Multi-select sub-details
+  subDetails?: SubDetailItem[];     // Multi-select sub-details list
+  detailScore?: number;             // Score when all sub-details are selected (when main item is checked)
+  partialScore?: number;            // Score when sub-details are partially selected
+  useDetailScore?: boolean;         // Whether to use new scoring logic
+  // Special reverse scoring (e.g. measurement: not selected = full score, selected = half)
+  reverseScoring?: boolean;         // true: not selected = full score, selected = half
+  // Flat Knit specific
+  guidance?: string;                // Guidance
+  guidanceEn?: string;              // English guidance
+  scoreOptions?: number[];          // Score options (e.g. [0.1, 0, -0.5])
+  penaltyRule?: string;             // Penalty rule description
+  penaltyRuleEn?: string;           // English penalty rule description
+  penaltyItems?: string[];          // Other item IDs affected by this item
+  penaltyOnZeroScore?: boolean;     // Whether to trigger penalty when 0 score is selected
 }
 
 export interface AuditResult {

@@ -1,8 +1,8 @@
-// AI总结报告生成器
+// AI Summary Report Generator
 import { EvaluationRecord, AuditModule } from '../types';
 import { lightWovenModules, lingerieSwimwearModules, flatKnitModules } from '../data/factoryModules';
 
-// AI总结报告数据结构
+// AI Summary Report Data Structure
 export interface AISummaryReport {
   overallAssessment: string;
   keyIssuesAnalysis: string;
@@ -12,34 +12,35 @@ export interface AISummaryReport {
   generatedAt: string;
 }
 
-// 生成AI总结
-export async function generateAISummary(record: EvaluationRecord): Promise<AISummaryReport> {
-  const evaluationSummary = buildEvaluationSummary(record);
-  // callDeepSeekAPI 现在直接返回解析后的 AISummaryReport
+// Generate AI summary
+export async function generateAISummary(record: EvaluationRecord, lang: 'zh' | 'en' = 'zh'): Promise<AISummaryReport> {
+  const evaluationSummary = buildEvaluationSummary(record, lang);
+  // callDeepSeekAPI directly returns parsed AISummaryReport
   return callDeepSeekAPI(evaluationSummary);
 }
 
-// 获取所有模块
+// Get all modules
 const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules, ...flatKnitModules];
 
-// 构建评估数据摘要
-function buildEvaluationSummary(record: EvaluationRecord): string {
+// Build evaluation data summary
+function buildEvaluationSummary(record: EvaluationRecord, lang: 'zh' | 'en' = 'zh'): string {
+  const isEn = lang === 'en';
   const summary = {
-    工厂信息: {
-      名称: record.factoryName,
-      评估日期: record.evalDate,
-      评估类型: record.evalType,
-      总得分: `${record.overallPercent.toFixed(2)}%`
+    [isEn ? 'factoryInfo' : '工厂信息']: {
+      [isEn ? 'name' : '名称']: record.factoryName,
+      [isEn ? 'auditDate' : '评估日期']: record.evalDate,
+      [isEn ? 'auditType' : '评估类型']: record.evalType,
+      [isEn ? 'totalScore' : '总得分']: `${record.overallPercent.toFixed(2)}%`
     },
-    详细评估结果: getDetailedResults(record),
-    不合格项汇总: getFailedItemsDetailed(record),
-    评估员备注: record.comments || '无'
+    [isEn ? 'detailedResults' : '详细评估结果']: getDetailedResults(record, lang),
+    [isEn ? 'failedItems' : '不合格项汇总']: getFailedItemsDetailed(record, lang),
+    [isEn ? 'evaluatorNotes' : '评估员备注']: record.comments || (isEn ? 'None' : '无')
   };
 
   return JSON.stringify(summary, null, 2);
 }
 
-// 创建 item ID 到模块信息的映射
+// Create item ID to module info map
 const itemIdToModuleMap = new Map<string, { item: any; moduleName: string; subModuleName: string }>();
 allModules.forEach(module => {
   Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
@@ -49,23 +50,24 @@ allModules.forEach(module => {
   });
 });
 
-// 获取详细的评估结果
-function getDetailedResults(record: EvaluationRecord): any[] {
+// Get detailed evaluation results
+function getDetailedResults(record: EvaluationRecord, lang: 'zh' | 'en' = 'zh'): any[] {
+  const isEn = lang === 'en';
   const results = record.results || {};
   const detailedResults: any[] = [];
 
-  // 只遍历 results 中实际有数据的项
+  // Only iterate items that have actual data
   Object.entries(results).forEach(([itemId, result]) => {
     const moduleInfo = itemIdToModuleMap.get(itemId);
     if (moduleInfo) {
       const itemData: any = {
-        模块: moduleInfo.moduleName,
-        子模块: moduleInfo.subModuleName,
-        评估项: moduleInfo.item.name,
-        分值: moduleInfo.item.score,
-        是否合格: result.isChecked,
-        不合格详情: result.details || [],
-        评估员评论: result.comment || ''
+        [isEn ? 'module' : '模块']: moduleInfo.moduleName,
+        [isEn ? 'subModule' : '子模块']: moduleInfo.subModuleName,
+        [isEn ? 'item' : '评估项']: moduleInfo.item.name,
+        [isEn ? 'score' : '分值']: moduleInfo.item.score,
+        [isEn ? 'passed' : '是否合格']: result.isChecked,
+        [isEn ? 'failedDetails' : '不合格详情']: result.details || [],
+        [isEn ? 'evaluatorComment' : '评估员评论']: result.comment || ''
       };
       detailedResults.push(itemData);
     }
@@ -74,44 +76,41 @@ function getDetailedResults(record: EvaluationRecord): any[] {
   return detailedResults;
 }
 
-// 获取详细的不合格项
-function getFailedItemsDetailed(record: EvaluationRecord): any[] {
+// Get detailed failed items
+function getFailedItemsDetailed(record: EvaluationRecord, lang: 'zh' | 'en' = 'zh'): any[] {
+  const isEn = lang === 'en';
   const results = record.results || {};
   const failedItems: any[] = [];
 
-  console.log('获取不合格项，record.results:', Object.keys(results).length, '项');
-
-  // 只遍历 results 中实际有数据的项
+  // Only iterate items that have actual data
   Object.entries(results).forEach(([itemId, result]) => {
     const moduleInfo = itemIdToModuleMap.get(itemId);
     if (moduleInfo && !result.isChecked) {
-      console.log(`不合格项: ${itemId} - ${moduleInfo.item.name}, isChecked: ${result.isChecked}, details:`, result.details);
       failedItems.push({
-        模块: moduleInfo.moduleName,
-        子模块: moduleInfo.subModuleName,
-        评估项: moduleInfo.item.name,
-        不合格内容: result.details || [],
-        评估员建议: result.comment || ''
+        [isEn ? 'module' : '模块']: moduleInfo.moduleName,
+        [isEn ? 'subModule' : '子模块']: moduleInfo.subModuleName,
+        [isEn ? 'item' : '评估项']: moduleInfo.item.name,
+        [isEn ? 'failedContent' : '不合格内容']: result.details || [],
+        [isEn ? 'evaluatorSuggestion' : '评估员建议']: result.comment || ''
       });
     }
   });
 
-  console.log('找到不合格项数量:', failedItems.length);
   return failedItems;
 }
 
-// 获取模块得分情况
+// Get module scores
 function getModuleScores(record: EvaluationRecord): any {
   const moduleScores: { [key: string]: { score: number; total: number; percent: number } } = {};
 
-  // 从results中提取各模块的得分情况
+  // Extract score from results
   const results = record.results || {};
 
-  // 按模块分组统计
+  // Group by module
   const moduleGroups: { [key: string]: { checked: number; total: number } } = {};
 
   Object.entries(results).forEach(([key, result]) => {
-    const moduleId = key.split('_')[0]; // 获取模块ID前缀
+    const moduleId = key.split('_')[0]; // Get module ID prefix
     if (!moduleGroups[moduleId]) {
       moduleGroups[moduleId] = { checked: 0, total: 0 };
     }
@@ -121,7 +120,7 @@ function getModuleScores(record: EvaluationRecord): any {
     }
   });
 
-  // 计算每个模块的得分率
+  // Calculate each module score rate
   Object.entries(moduleGroups).forEach(([moduleId, data]) => {
     moduleScores[moduleId] = {
       score: data.checked,
@@ -133,7 +132,7 @@ function getModuleScores(record: EvaluationRecord): any {
   return moduleScores;
 }
 
-// 获取不合格项列表
+// Get failed items list
 function getFailedItems(record: EvaluationRecord): any[] {
   const failedItems: any[] = [];
   const results = record.results || {};
@@ -152,28 +151,28 @@ function getFailedItems(record: EvaluationRecord): any[] {
   return failedItems;
 }
 
-// 获取历史整改情况
+// Get rectification history
 function getRectificationHistory(record: EvaluationRecord): any {
-  // 如果是整改复查，返回相关信息
+  // If rectification review, return related info
   if (record.evalType === '整改复查') {
     return {
-      审核性质: '整改复查',
-      整改说明: record.comments || '无'
+      auditType: 'Rectification Review',
+      rectificationNote: record.comments || 'None'
     };
   }
   return null;
 }
 
-// 调用DeepSeek API
+// Call DeepSeek API
 async function callDeepSeekAPI(evaluationSummary: string): Promise<AISummaryReport> {
   const evaluationData = JSON.parse(evaluationSummary);
 
-  // 调试：打印传给AI的数据
-  console.log('=== 传给AI的评估数据 ===');
-  console.log('不合格项数量:', evaluationData.不合格项汇总?.length || 0);
-  console.log('不合格项:', JSON.stringify(evaluationData.不合格项汇总, null, 2));
-  console.log('详细评估结果数量:', evaluationData.详细评估结果?.length || 0);
-  console.log('前3项评估结果:', JSON.stringify(evaluationData.详细评估结果?.slice(0, 3), null, 2));
+  // Debug: print data sent to AI
+  console.log('=== Data sent to AI ===');
+  console.log('Failed items count:', evaluationData.failedItems?.length || 0);
+  console.log('Failed items:', JSON.stringify(evaluationData.failedItems, null, 2));
+  console.log('Detailed results count:', evaluationData.detailedResults?.length || 0);
+  console.log('First 3 results:', JSON.stringify(evaluationData.detailedResults?.slice(0, 3), null, 2));
   console.log('========================');
 
   const deepseekApiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
@@ -181,14 +180,14 @@ async function callDeepSeekAPI(evaluationSummary: string): Promise<AISummaryRepo
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('YOUR_PROJECT_REF')) {
-    throw new Error('Supabase配置缺失，请检查环境变量');
+    throw new Error('Supabase configuration missing, please check environment variables');
   }
 
   if (!deepseekApiKey) {
-    throw new Error('DeepSeek API密钥未配置，请在.env文件中设置VITE_DEEPSEEK_API_KEY');
+    throw new Error('DeepSeek API key not configured, please set VITE_DEEPSEEK_API_KEY in .env file');
   }
 
-  console.log('使用Supabase Edge Function调用DeepSeek API');
+  console.log('Using Supabase Edge Function to call DeepSeek API');
 
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-summary`, {
     method: 'POST',
@@ -204,74 +203,74 @@ async function callDeepSeekAPI(evaluationSummary: string): Promise<AISummaryRepo
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error || 'Edge Function调用失败');
+    throw new Error(errorData.error || 'Edge Function call failed');
   }
 
   const result = await response.json();
-  console.log('=== Edge Function 返回数据 ===');
+  console.log('=== Edge Function Return Data ===');
   console.log('result.success:', result.success);
   console.log('result.data:', JSON.stringify(result.data, null, 2));
   console.log('========================');
-  
+
   if (result.success) {
-    // Edge Function 已经解析好了，直接返回解析后的数据
+    // Edge Function already parsed, return parsed data directly
     return result.data as AISummaryReport;
   } else {
-    throw new Error(result.error || 'AI分析失败');
+    throw new Error(result.error || 'AI analysis failed');
   }
 }
 
-// 格式化AI内容：去掉Markdown符号，加粗小标题，保持段落格式
+// Format AI content: remove Markdown symbols, bold subtitles, keep paragraph format
 function formatAIContent(content: string): string {
-  if (!content) return '暂无详细分析';
+  if (!content) return 'No detailed analysis';
 
-  // 先处理整个内容，去掉Markdown标题符号（但保留表格）
+  // Process content, remove Markdown header symbols (keep tables)
   const processedContent = content
-    .replace(/^#{1,6}\s*/gm, '')  // 去掉行首的 # ## ### 等标题符号
-    .replace(/\*\*/g, '')         // 去掉 ** 粗体符号
-    .replace(/\*/g, '')           // 去掉 * 符号
-    .replace(/`/g, '');           // 去掉 ` 代码符号
+    .replace(/^#{1,6}\s*/gm, '')  // Remove leading # ## ### etc.
+    .replace(/\*\*/g, '')         // Remove ** bold symbols
+    .replace(/\*/g, '')           // Remove * symbols
+    .replace(/`/g, '');           // Remove ` code symbols
 
-  // 按段落分割
+  // Split by paragraphs
   const paragraphs = processedContent.split('\n\n');
-  
+
   return paragraphs
     .map(paragraph => {
-      // 检查是否是表格（包含 | 符号）
+      // Check if it's a table (contains |)
       const lines = paragraph.split('\n');
       const isTable = lines.some(line => line.includes('|'));
-      
+
       if (isTable) {
-        // 处理表格：去掉 | 符号，保留内容
+        // Process table: remove | symbols, keep content
         const tableRows = lines
-          .filter(line => line.trim() && !line.match(/^\|[-:]+\|/)) // 去掉分隔线
+          .filter(line => line.trim() && !line.match(/^\|[-:]+\|/)) // Remove separator lines
           .map(line => {
-            // 分割单元格
+            // Split cells
             const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
             if (cells.length === 0) return '';
-            // 用空格连接单元格内容
+            // Join cells with space
             return cells.join(' ');
           })
           .filter(line => line.trim());
-        
+
         if (tableRows.length === 0) return '';
         return `<p>${tableRows.join('<br>')}</p>`;
       }
-      
-      // 处理普通段落
+
+      // Process regular paragraph
       const processedLines = lines
         .map(line => {
-          // 去掉行首的列表符号
+          // Remove leading list symbols
           let formattedLine = line.replace(/^\s*[-*•]\s*/, '');
-          
-          // 加粗整个标题行（如：1. 问题描述、2. 建议措施等）
+
+          // Bold entire title line (e.g.: 1. Problem Description, 2. Suggestion Measures etc.)
           formattedLine = formattedLine.replace(/^(\d+\.\s*)(.+)$/, '<strong>$1$2</strong>');
-          
+
           return formattedLine;
         })
         .filter(line => line.trim());
-      
-      // 如果段落有多行，用 <br> 连接；如果只有一行，直接返回
+
+      // If paragraph has multiple lines, use <br>; if only one line, return directly
       if (processedLines.length === 0) return '';
       if (processedLines.length === 1) return `<p>${processedLines[0]}</p>`;
       return `<p>${processedLines.join('<br>')}</p>`;
@@ -280,13 +279,13 @@ function formatAIContent(content: string): string {
     .join('');
 }
 
-// 生成AI总结PDF报告
-export function generateAISummaryPDF(record: EvaluationRecord, aiSummary: AISummaryReport): void {
-  const printContent = createAISummaryHTML(record, aiSummary);
+// Generate AI summary PDF report
+export function generateAISummaryPDF(record: EvaluationRecord, aiSummary: AISummaryReport, lang: 'zh' | 'en' = 'zh'): void {
+  const printContent = createAISummaryHTML(record, aiSummary, lang);
 
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
-    alert('请允许弹出窗口以生成AI总结报告');
+    alert(lang === 'en' ? 'Please allow pop-up windows to generate the AI summary report' : '请允许弹出窗口以生成AI总结报告');
     return;
   }
 
@@ -300,14 +299,33 @@ export function generateAISummaryPDF(record: EvaluationRecord, aiSummary: AISumm
   };
 }
 
-// 创建AI总结HTML内容
-function createAISummaryHTML(record: EvaluationRecord, aiSummary: AISummaryReport): string {
+// Create AI summary HTML content
+function createAISummaryHTML(record: EvaluationRecord, aiSummary: AISummaryReport, lang: 'zh' | 'en' = 'zh'): string {
+  const isEn = lang === 'en';
+  const labels = {
+    htmlLang: isEn ? 'en' : 'zh-CN',
+    reportTitle: isEn ? 'AI Analysis Report' : 'AI智能分析报告',
+    pageTitle: isEn ? `AI Analysis Report - ${record.factoryName}` : `AI智能分析报告 - ${record.factoryName}`,
+    factory: isEn ? 'Factory: ' : '工厂名称：',
+    evalDate: isEn ? 'Audit Date: ' : '评估日期：',
+    evaluator: isEn ? 'Evaluator: ' : '评估人员：',
+    evalType: isEn ? 'Audit Type: ' : '审核性质：',
+    totalScore: isEn ? 'Total Score: ' : '工厂总分：',
+    aiTime: isEn ? 'AI Analysis Time: ' : 'AI分析时间：',
+    overall: isEn ? 'Overall Assessment' : '总体评估概览',
+    keyProblems: isEn ? 'Key Problem Analysis' : '重点问题分析',
+    suggestions: isEn ? 'Improvement Suggestions' : '改进建议',
+    risk: isEn ? 'Risk Warning' : '风险预警',
+    optimization: isEn ? 'Optimization Direction' : '优化方向',
+    footer: isEn ? 'This report is generated by Factory Audit System AI' : '此报告由欧图工厂审核系统AI分析生成',
+  };
+
   return `
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${labels.htmlLang}">
 <head>
   <meta charset="UTF-8">
-  <title>AI智能分析报告 - ${record.factoryName}</title>
+  <title>${labels.pageTitle}</title>
   <style>
     @page {
       size: A4;
@@ -319,7 +337,7 @@ function createAISummaryHTML(record: EvaluationRecord, aiSummary: AISummaryRepor
       box-sizing: border-box;
     }
     body {
-      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+      font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 12px;
       line-height: 1.8;
       color: #333;
@@ -380,44 +398,44 @@ function createAISummaryHTML(record: EvaluationRecord, aiSummary: AISummaryRepor
   </style>
 </head>
 <body>
-  <h1>AI智能分析报告</h1>
+  <h1>${labels.reportTitle}</h1>
 
   <div class="info-box">
-    <p><strong>工厂名称：</strong>${record.factoryName}</p>
-    <p><strong>评估日期：</strong>${record.evalDate}</p>
-    <p><strong>评估人员：</strong>${record.evaluator}</p>
-    <p><strong>审核性质：</strong>${record.evalType}</p>
-    <p><strong>工厂总分：</strong>${record.overallPercent.toFixed(2)}%</p>
-    <p><strong>AI分析时间：</strong>${new Date(aiSummary.generatedAt).toLocaleString('zh-CN')}</p>
+    <p><strong>${labels.factory}</strong>${record.factoryName}</p>
+    <p><strong>${labels.evalDate}</strong>${record.evalDate}</p>
+    <p><strong>${labels.evaluator}</strong>${record.evaluator}</p>
+    <p><strong>${labels.evalType}</strong>${record.evalType}</p>
+    <p><strong>${labels.totalScore}</strong>${record.overallPercent.toFixed(2)}%</p>
+    <p><strong>${labels.aiTime}</strong>${new Date(aiSummary.generatedAt).toLocaleString(isEn ? 'en-US' : 'zh-CN')}</p>
   </div>
 
-  <h2>总体评估概览</h2>
+  <h2>${labels.overall}</h2>
   <div class="section">
     <p>${formatAIContent(aiSummary.overallAssessment)}</p>
   </div>
 
-  <h2>重点问题分析</h2>
+  <h2>${labels.keyProblems}</h2>
   <div class="section">
     <p>${formatAIContent(aiSummary.keyIssuesAnalysis)}</p>
   </div>
 
-  <h2>改进建议</h2>
+  <h2>${labels.suggestions}</h2>
   <div class="section">
     <p>${formatAIContent(aiSummary.improvementSuggestions)}</p>
   </div>
 
-  <h2>风险预警</h2>
+  <h2>${labels.risk}</h2>
   <div class="section">
     <p>${formatAIContent(aiSummary.riskWarnings)}</p>
   </div>
 
-  <h2>优化方向</h2>
+  <h2>${labels.optimization}</h2>
   <div class="section">
     <p>${formatAIContent(aiSummary.optimizationDirection)}</p>
   </div>
 
   <div class="footer">
-    <p>此报告由欧图工厂审核系统AI分析生成</p>
+    <p>${labels.footer}</p>
   </div>
 </body>
 </html>

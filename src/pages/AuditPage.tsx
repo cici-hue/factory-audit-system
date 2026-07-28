@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { getAuditModules, getTotalScore } from '../data/factoryModules';
 import { AuditResult, Customer, FailedItemPriority } from '../types';
+import { t, TranslationKey } from '../i18n/translations';
 import {
   CheckCircle2,
   XCircle,
@@ -21,6 +22,7 @@ import { PrioritySortModal } from '../components/PrioritySortModal';
 import { draftService, factorySupplierService } from '../lib/database';
 import { uploadTempImage, moveTempImages } from '../lib/supabase';
 import { Supplier } from '../types';
+import { getModuleDisplayName, getSubModuleDisplayName } from '../utils/moduleTranslations';
 
 export default function AuditPage() {
   const {
@@ -36,9 +38,12 @@ export default function AuditPage() {
     clearCurrentAuditResults,
     isEditMode,
     editingRecord,
+    language,
     setEditMode,
     getEvaluationsByFactory,
   } = useApp();
+
+  const tr = (key: TranslationKey, params?: Record<string, string | number>) => t(language, key, params);
 
   // 根据工厂类型获取评估模块和总分
   const auditModules = useMemo(() => getAuditModules(factoryType), [factoryType]);
@@ -138,7 +143,7 @@ export default function AuditPage() {
             resetToDefaultState();
           }
         } catch (error) {
-          console.error('检查草稿失败:', error);
+          console.error(isZh ? '检查草稿失败:' : 'Check draft failed:', error);
           resetToDefaultState();
         }
       };
@@ -237,8 +242,8 @@ export default function AuditPage() {
           setSelectedSupplier(null);
         }
       } catch (error) {
-        console.error('加载工厂关联供应商失败:', error);
-        toast.error('加载供应商列表失败');
+        console.error(isZh ? '加载工厂关联供应商失败:' : 'Failed to load factory suppliers:', error);
+        toast.error(tr('audit.loadSuppliersFailed'));
         setFactorySuppliers([]);
       } finally {
         setIsLoadingSuppliers(false);
@@ -289,7 +294,7 @@ export default function AuditPage() {
   const saveProgress = useCallback(async () => {
     if (isEditMode || isRestoring) return;
     if (!user?.id) {
-      toast.error('请先登录');
+      toast.error(tr('audit.pleaseLogin'));
       return;
     }
 
@@ -327,13 +332,13 @@ export default function AuditPage() {
       if (saved) {
         setLastSavedTime(new Date());
         setHasAutoSaveData(true);
-        toast.success('进度已保存到数据库', { duration: 1500 });
+        toast.success(tr('audit.progressSaved'), { duration: 1500 });
       } else {
-        toast.error('保存进度失败');
+        toast.error(tr('audit.saveProgressFailed'));
       }
     } catch (error) {
-      console.error('保存进度失败:', error);
-      toast.error('保存进度失败，请检查网络连接');
+      console.error(isZh ? '保存进度失败:' : 'Save progress failed:', error);
+      toast.error(tr('audit.saveProgressFailedNetwork'));
     }
   }, [
     selectedFactory,
@@ -357,7 +362,7 @@ export default function AuditPage() {
   // 恢复进度
   const restoreProgress = useCallback(async () => {
     if (!user?.id) {
-      toast.error('请先登录');
+      toast.error(tr('audit.pleaseLogin'));
       return false;
     }
 
@@ -392,12 +397,12 @@ export default function AuditPage() {
       setHasAutoSaveData(true);
       setIsRestoring(false);
 
-      toast.success('已恢复上次评估进度');
+      toast.success(tr('audit.progressRestored'));
       return true;
     } catch (error) {
-      console.error('恢复进度失败:', error);
+      console.error(isZh ? '恢复进度失败:' : 'Restore progress failed:', error);
       setIsRestoring(false);
-      toast.error('恢复进度失败，请检查网络连接');
+      toast.error(tr('audit.restoreProgressFailed'));
       return false;
     }
   }, [user?.id, setCurrentAuditResults]);
@@ -411,7 +416,7 @@ export default function AuditPage() {
       setLastSavedTime(null);
       setHasAutoSaveData(false);
     } catch (error) {
-      console.error('清除进度失败:', error);
+      console.error(isZh ? '清除进度失败:' : 'Clear progress failed:', error);
     }
   }, [user?.id]);
 
@@ -461,10 +466,10 @@ export default function AuditPage() {
           if (saved) {
             setLastSavedTime(new Date());
             setHasAutoSaveData(true);
-            console.log('自动保存成功');
+            console.log(isZh ? '自动保存成功' : 'Auto-save success');
           }
         } catch (error) {
-          console.error('自动保存失败:', error);
+          console.error(isZh ? '自动保存失败:' : 'Auto-save failed:', error);
         }
       };
       
@@ -507,7 +512,12 @@ export default function AuditPage() {
       let modEarned = 0;
       let modMax = 0;
 
-      Object.values(mod.subModules).forEach(subMod => {
+      Object.entries(mod.subModules).forEach(([subModuleName, subMod]) => {
+          // 跳过被标记为无需评分的子模块（如无需验针）
+          const subModuleKey = `${mod.id}-${subModuleName}`;
+          if (skippedSubModules.has(subModuleKey)) {
+            return;
+          }
           const penalizedItemIds = new Set<string>();
           subMod.items.forEach(item => {
             const result = currentAuditResults[item.id];
@@ -618,7 +628,7 @@ export default function AuditPage() {
       const currentPercent = finalPercentage;
       const accumulatedPercent = lastPercent + currentPercent;
       finalPercentage = Math.min(accumulatedPercent, 100);
-      console.log('整改复查累加百分比计算:', {
+      console.log(isZh ? '整改复查累加百分比计算:' : 'Rectification review accumulated percentage:', {
         lastPercent,
         currentPercent,
         accumulatedPercent,
@@ -631,7 +641,7 @@ export default function AuditPage() {
       percentage: finalPercentage,
       moduleScores: modScores,
     };
-  }, [currentAuditResults, selectedModules, auditModules, TOTAL_SCORE, evalType, lastEvaluation, skippedModules]);
+  }, [currentAuditResults, selectedModules, auditModules, TOTAL_SCORE, evalType, lastEvaluation, skippedModules, skippedSubModules]);
 
   // 处理复选框变更（主项）
   const handleCheckChange = (itemId: string, checked: boolean, item?: any) => {
@@ -758,21 +768,21 @@ export default function AuditPage() {
   // 生成临时文件夹名称（工厂_评估人_日期）
   const getTempFolderName = useCallback(() => {
     const factory = factoryList.find(f => f.id === selectedFactory);
-    const factoryName = factory?.name || '未知工厂';
-    const evaluatorName = user?.name || user?.username || '未知用户';
+    const factoryName = factory?.name || tr('audit.unknownFactory');
+    const evaluatorName = user?.name || user?.username || tr('audit.unknownUser');
     const dateStr = evalDate || new Date().toISOString().split('T')[0];
     return `${factoryName}_${evaluatorName}_${dateStr}`;
-  }, [selectedFactory, factoryList, user, evalDate]);
+  }, [selectedFactory, factoryList, user, evalDate, tr]);
 
   // 处理图片上传（上传到 Supabase Storage）
   const handleImageUpload = async (itemId: string, file: File) => {
     try {
       // 显示上传中提示
-      toast.loading('正在上传图片...', { id: `upload-${itemId}` });
+      toast.loading(tr('audit.uploadingPhoto'), { id: `upload-${itemId}` });
 
       // 生成文件夹名称
       const folderName = getTempFolderName();
-      console.log('使用文件夹名称:', folderName);
+      console.log(isZh ? '使用文件夹名称:' : 'Using folder name:', folderName);
 
       // 上传到 Storage（使用临时文件夹）
       const imageUrl = await uploadTempImage(file, folderName, itemId);
@@ -785,13 +795,13 @@ export default function AuditPage() {
             imagePath: imageUrl,
           },
         });
-        toast.success('图片上传成功', { id: `upload-${itemId}` });
+        toast.success(tr('audit.photoUploadSuccess'), { id: `upload-${itemId}` });
       } else {
-        toast.error('图片上传失败', { id: `upload-${itemId}` });
+        toast.error(tr('audit.photoUploadFailed'), { id: `upload-${itemId}` });
       }
     } catch (error) {
-      console.error('上传图片失败:', error);
-      toast.error('图片上传失败', { id: `upload-${itemId}` });
+      console.error(isZh ? '上传图片失败:' : 'Photo upload failed:', error);
+      toast.error(tr('audit.photoUploadFailed'), { id: `upload-${itemId}` });
     }
   };
 
@@ -890,20 +900,20 @@ export default function AuditPage() {
   const handleSave = async () => {
     const factory = factoryList.find(f => f.id === selectedFactory);
     if (!factory) {
-      toast.error('请选择工厂');
+      toast.error(tr('audit.pleaseSelectFactory'));
       return;
     }
 
     // 验证选择供应商
     const supplier = supplierList.find(s => s.id === selectedSupplier);
     if (!supplier) {
-      toast.error('请选择供应商');
+      toast.error(tr('audit.pleaseSelectSupplier'));
       return;
     }
 
     // 验证至少选择一个模块
     if (selectedModules.length === 0) {
-      toast.error('请至少选择一个评估模块');
+      toast.error(tr('audit.pleaseSelectModule'));
       return;
     }
 
@@ -945,7 +955,7 @@ export default function AuditPage() {
 
   // 保存评估（带优先级）
   const saveEvaluation = async (evaluation: any, priorities: FailedItemPriority[]) => {
-    console.log('saveEvaluation 被调用:', { evaluation, priorities });
+    console.log(isZh ? 'saveEvaluation 被调用:' : 'saveEvaluation called:', { evaluation, priorities });
     
     // 收集所有图片URL
     const imageUrls: string[] = [];
@@ -959,31 +969,31 @@ export default function AuditPage() {
       ...evaluation,
       failedItemsPriority: priorities.length > 0 ? priorities : undefined
     };
-    console.log('准备保存的评估数据:', evaluationWithPriority);
+    console.log(isZh ? '准备保存的评估数据:' : 'Evaluation data to save:', evaluationWithPriority);
 
     let savedRecord;
     if (isEditMode && editingRecord) {
-      console.log('更新模式，记录ID:', editingRecord.id);
+      console.log(isZh ? '更新模式，记录ID:' : 'Update mode, record ID:', editingRecord.id);
       savedRecord = await updateEvaluation(editingRecord.id, evaluationWithPriority);
       if (savedRecord) {
-        toast.success('评估报告已更新');
+        toast.success(tr('audit.reportUpdated'));
         setEditMode(false);
         clearCurrentAuditResults();
       } else {
-        console.error('更新评估失败');
-        toast.error('保存失败');
+        console.error(isZh ? '更新评估失败' : 'Update evaluation failed');
+        toast.error(tr('audit.saveFailed'));
         return;
       }
     } else {
-      console.log('新增模式');
+      console.log(isZh ? '新增模式' : 'Create mode');
       savedRecord = await addEvaluation(evaluationWithPriority);
-      console.log('addEvaluation 返回:', savedRecord);
+      console.log(isZh ? 'addEvaluation 返回:' : 'addEvaluation returned:', savedRecord);
       if (savedRecord) {
-        toast.success('评估报告已保存');
+        toast.success(tr('audit.reportSaved'));
         clearCurrentAuditResults();
       } else {
-        console.error('新增评估失败');
-        toast.error('保存失败');
+        console.error(isZh ? '新增评估失败' : 'Create evaluation failed');
+        toast.error(tr('audit.saveFailed'));
         return;
       }
     }
@@ -993,10 +1003,10 @@ export default function AuditPage() {
       const tempFolderName = getTempFolderName();
       const finalFolderName = `${tempFolderName}_${savedRecord.id.substring(0, 8)}`;
       const evalId = savedRecord.id.substring(0, 8);
-      const evaluatorName = user?.name || user?.username || '未知用户';
-      console.log('开始移动临时图片到正式文件夹:', { tempFolderName, finalFolderName, evalId, evaluatorName });
+      const evaluatorName = user?.name || user?.username || tr('audit.unknownUser');
+      console.log(isZh ? '开始移动临时图片到正式文件夹:' : 'Start moving temp images to final folder:', { tempFolderName, finalFolderName, evalId, evaluatorName });
       const movedUrls = await moveTempImages(tempFolderName, finalFolderName, evalId, evaluatorName, imageUrls);
-      console.log('图片移动完成:', movedUrls);
+      console.log(isZh ? '图片移动完成:' : 'Images moved:', movedUrls);
       
       // 更新评估记录中的图片URL
       if (savedRecord.results) {
@@ -1012,9 +1022,9 @@ export default function AuditPage() {
       }
     }
 
-    // 生成并下载PDF
-    await generatePDF(savedRecord, evalType === '整改复查' ? lastEvaluation : undefined);
-    toast.success('PDF报告已生成并下载');
+    // Generate and download PDF
+    await generatePDF(savedRecord, evalType === '整改复查' ? lastEvaluation : undefined, language);
+    toast.success(tr('audit.pdfGenerated'));
 
     // 重置表单
     setComments('');
@@ -1037,15 +1047,15 @@ export default function AuditPage() {
 
   // 处理优先级排序确认
   const handlePriorityConfirm = (priorities: FailedItemPriority[]) => {
-    console.log('优先级排序确认:', priorities);
+    console.log(isZh ? '优先级排序确认:' : 'Priority sort confirmed:', priorities);
     setFailedItemsPriority(priorities);
     setShowPriorityModal(false);
     if (pendingEvaluation) {
-      console.log('开始保存评估:', pendingEvaluation);
+      console.log(isZh ? '开始保存评估:' : 'Start saving evaluation:', pendingEvaluation);
       saveEvaluation(pendingEvaluation, priorities);
     } else {
-      console.error('pendingEvaluation 为空');
-      toast.error('保存失败：评估数据丢失');
+      console.error(isZh ? 'pendingEvaluation 为空' : 'pendingEvaluation is empty');
+      toast.error(tr('audit.saveFailedData'));
     }
   };
 
@@ -1067,7 +1077,15 @@ export default function AuditPage() {
     if (!lastEvaluation) return '';
     const r = lastEvaluation.results?.[itemId];
     if (!r) return '';
-    return r.isChecked ? '上次合格' : '上次不合格';
+    return r.isChecked ? tr('audit.lastPassed') : tr('audit.lastFailed');
+  };
+
+  // 判断上次评估是否合格（用于颜色判断）
+  const isLastPassed = (itemId: string): boolean => {
+    if (!lastEvaluation) return false;
+    const r = lastEvaluation.results?.[itemId];
+    if (!r) return false;
+    return !!r.isChecked;
   };
 
   const lastFailedItemIds = useMemo(() => {
@@ -1106,7 +1124,12 @@ export default function AuditPage() {
         totals[mod.name] = 0;
         return;
       }
-      Object.values(mod.subModules).forEach((sub) => {
+      Object.entries(mod.subModules).forEach(([subModuleName, sub]) => {
+        // 跳过被标记为无需评分的子模块（如无需验针）
+        const subModuleKey = `${mod.id}-${subModuleName}`;
+        if (skippedSubModules.has(subModuleKey)) {
+          return;
+        }
         sub.items.forEach((item) => {
           if (item.scoreOptions && item.scoreOptions.length > 0) {
             // flat-knit 计分项用最大可能得分
@@ -1119,7 +1142,7 @@ export default function AuditPage() {
       totals[mod.name] = total;
     });
     return totals;
-  }, [skippedModules]);
+  }, [skippedModules, skippedSubModules]);
 
   const modulePercentages = useMemo(() => {
     const perc: Record<string, number> = {};
@@ -1137,13 +1160,13 @@ export default function AuditPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-amber-800">
             <RotateCcw className="w-5 h-5" />
-            <span>正在编辑历史记录：{editingRecord?.evalDate}</span>
+            <span>{tr('audit.editing', { date: editingRecord?.evalDate || '' })}</span>
           </div>
           <button
             onClick={handleCancelEdit}
             className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg transition-colors"
           >
-            取消编辑
+            {tr('audit.cancelEdit')}
           </button>
         </div>
       )}
@@ -1154,10 +1177,10 @@ export default function AuditPage() {
           <div className="flex items-center gap-2 text-blue-800">
             <Save className="w-5 h-5" />
             <span>
-              检测到未完成的评估进度
+              {tr('audit.detectedProgress')}
               {lastSavedTime && (
                 <span className="text-blue-600 ml-1">
-                  (上次保存：{lastSavedTime.toLocaleString()})
+                  {tr('audit.lastSavedAt', { time: lastSavedTime.toLocaleString() })}
                 </span>
               )}
             </span>
@@ -1167,17 +1190,17 @@ export default function AuditPage() {
               onClick={async () => {
                 await clearSavedProgress();
                 resetToDefaultState();
-                toast.success('已清除保存的进度');
+                toast.success(tr('audit.progressCleared'));
               }}
               className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 rounded-lg transition-colors"
             >
-              放弃进度
+              {tr('audit.discardProgress')}
             </button>
             <button
               onClick={restoreProgress}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
-              恢复进度
+              {tr('audit.restoreProgress')}
             </button>
           </div>
         </div>
@@ -1185,10 +1208,12 @@ export default function AuditPage() {
 
       {/* 基础配置 */}
       <div className="bg-white rounded-2xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold mb-4">欢迎回来，评估员！</h2>
+        <h2 className="text-lg font-semibold mb-4">
+          {tr('audit.welcome', { name: user?.name || tr('audit.evaluator') })}
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="relative factory-dropdown-container">
-            <label className="block text-sm font-medium text-slate-700 mb-1">评估工厂 <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.factory')} <span className="text-red-500">*</span></label>
             <div className="relative">
               <button
                 type="button"
@@ -1196,7 +1221,7 @@ export default function AuditPage() {
                 className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left"
               >
                 <span className={selectedFactory === null ? 'text-slate-400' : 'text-slate-700'}>
-                  {selectedFactory === null ? '请选择工厂' : factoryList.find(f => f.id === selectedFactory)?.name}
+                  {selectedFactory === null ? tr('audit.selectFactory') : factoryList.find(f => f.id === selectedFactory)?.name}
                 </span>
                 <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isFactoryDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -1205,7 +1230,7 @@ export default function AuditPage() {
                   <div className="p-2 border-b">
                     <input
                       type="text"
-                      placeholder="搜索工厂..."
+                      placeholder={tr('audit.searchFactory')}
                       value={factorySearch}
                       onChange={(e) => setFactorySearch(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1230,7 +1255,9 @@ export default function AuditPage() {
                         </button>
                       ))}
                     {factoryList.filter(f => f.name.toLowerCase().includes(factorySearch.toLowerCase())).length === 0 && (
-                      <div className="px-4 py-3 text-sm text-slate-400 text-center">未找到匹配的工厂</div>
+                      <div className="px-4 py-3 text-sm text-slate-400 text-center">
+                        {tr('audit.noFactoryMatch')}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1238,17 +1265,17 @@ export default function AuditPage() {
             </div>
           </div>
           <div className="relative supplier-dropdown-container">
-            <label className="block text-sm font-medium text-slate-700 mb-1">供应商 <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.supplier')} <span className="text-red-500">*</span></label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => {
                   if (!selectedFactory) {
-                    toast.info('请先选择工厂');
+                    toast.info(tr('audit.selectFactoryFirst'));
                     return;
                   }
                   if (factorySuppliers.length === 0) {
-                    toast.info('该工厂暂无关联供应商');
+                    toast.info(tr('audit.noSupplierForFactory'));
                     return;
                   }
                   setIsSupplierDropdownOpen(!isSupplierDropdownOpen);
@@ -1257,14 +1284,14 @@ export default function AuditPage() {
                 className={`w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left ${(!selectedFactory || factorySuppliers.length === 0) ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <span className={selectedSupplier === null ? 'text-slate-400' : 'text-slate-700'}>
-                  {!selectedFactory 
-                    ? '请先选择工厂' 
-                    : isLoadingSuppliers 
-                      ? '加载中...'
+                  {!selectedFactory
+                    ? tr('audit.selectFactoryFirst')
+                    : isLoadingSuppliers
+                      ? tr('audit.loading')
                       : factorySuppliers.length === 0
-                        ? '该工厂暂无关联供应商'
-                        : selectedSupplier === null 
-                          ? `请选择供应商 (${factorySuppliers.length}个)` 
+                        ? tr('audit.noSupplierForFactory')
+                        : selectedSupplier === null
+                          ? tr('audit.selectSupplier', { n: factorySuppliers.length })
                           : factorySuppliers.find(s => s.id === selectedSupplier)?.name}
                 </span>
                 {isLoadingSuppliers ? (
@@ -1278,7 +1305,7 @@ export default function AuditPage() {
                   <div className="p-2 border-b">
                     <input
                       type="text"
-                      placeholder="搜索供应商..."
+                      placeholder={tr('audit.searchSupplier')}
                       value={supplierSearch}
                       onChange={(e) => setSupplierSearch(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1303,7 +1330,7 @@ export default function AuditPage() {
                         </button>
                       ))}
                     {factorySuppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
-                      <div className="px-4 py-3 text-sm text-slate-400 text-center">未找到匹配的供应商</div>
+                      <div className="px-4 py-3 text-sm text-slate-400 text-center">{tr('audit.noMatchingSupplier')}</div>
                     )}
                   </div>
                 </div>
@@ -1311,7 +1338,7 @@ export default function AuditPage() {
             </div>
           </div>
           <div className="customer-dropdown-container">
-            <label className="block text-sm font-medium text-slate-700 mb-2">客户</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{tr('audit.customer')}</label>
             <div className="relative">
               <button
                 type="button"
@@ -1319,7 +1346,7 @@ export default function AuditPage() {
                 className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between"
               >
                 <span className={selectedCustomers.length === 0 ? 'text-slate-400' : 'text-slate-700'}>
-                  {selectedCustomers.length === 0 ? '请选择客户' : `${selectedCustomers.length} 个客户已选择`}
+                  {selectedCustomers.length === 0 ? tr('audit.selectCustomer') : tr('audit.customersSelected', { n: selectedCustomers.length })}
                 </span>
                 <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isCustomerDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -1341,7 +1368,7 @@ export default function AuditPage() {
                         className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
                       <label htmlFor="select-all-customers" className="text-sm text-slate-700 cursor-pointer select-none">
-                        全选
+                        {tr('audit.selectAll')}
                       </label>
                     </div>
                   </div>
@@ -1373,7 +1400,7 @@ export default function AuditPage() {
                       onClick={() => setIsCustomerDropdownOpen(false)}
                       className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
                     >
-                      确定
+                      {tr('audit.confirm')}
                     </button>
                   </div>
                 </div>
@@ -1381,7 +1408,7 @@ export default function AuditPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">评估日期</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.auditDate')}</label>
             <input
               type="date"
               value={evalDate}
@@ -1390,19 +1417,19 @@ export default function AuditPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">审核性质</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.auditTypeLabel')}</label>
             <select
               value={evalType}
               onChange={(e) => setEvalType(e.target.value as '常规审核' | '整改复查' | '随机抽查')}
               className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="常规审核">常规审核</option>
-              <option value="整改复查">整改复查</option>
-              <option value="随机抽查">随机抽查</option>
+              <option value="常规审核">{tr('audit.evalType.regular')}</option>
+              <option value="整改复查">{tr('audit.evalType.rectification')}</option>
+              <option value="随机抽查">{tr('audit.evalType.random')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">评估人员</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.evaluatorLabel')}</label>
             <input
               type="text"
               value={user?.name || ''}
@@ -1411,33 +1438,33 @@ export default function AuditPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">订单号</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.orderNo')}</label>
             <input
               type="text"
               value={orderNo}
               onChange={(e) => setOrderNo(e.target.value)}
               className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入订单号"
+              placeholder={tr('audit.orderNoPlaceholder')}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">款号</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.styleNo')}</label>
             <input
               type="text"
               value={styleNo}
               onChange={(e) => setStyleNo(e.target.value)}
               className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入款号"
+              placeholder={tr('audit.styleNoPlaceholder')}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">生产状态</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{tr('audit.productionStatus')}</label>
             <input
               type="text"
               value={productionStatus}
               onChange={(e) => setProductionStatus(e.target.value)}
               className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入生产状态"
+              placeholder={tr('audit.productionStatusPlaceholder')}
             />
           </div>
         </div>
@@ -1446,7 +1473,7 @@ export default function AuditPage() {
         {evalType === '整改复查' && lastEvaluation && (
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
             <p className="text-blue-800">
-              上次评估日期：{lastEvaluation.evalDate}，得分率：{lastEvaluation.overallPercent.toFixed(2)}%
+              {tr('audit.lastEvalInfo', { date: lastEvaluation.evalDate, score: lastEvaluation.overallPercent.toFixed(2) })}
             </p>
           </div>
         )}
@@ -1457,7 +1484,7 @@ export default function AuditPage() {
             <div className="flex items-center gap-2 mb-3">
               <CheckSquare className="w-5 h-5 text-blue-600" />
               <span className="font-medium text-slate-700">
-                {evalType === '整改复查' ? '请选择需要复查的模块（可多选）' : '请选择抽查的模块（可多选）'}
+                {evalType === '整改复查' ? tr('audit.selectRectifyModules') : tr('audit.selectRandomModules')}
               </span>
 
               {evalType === '整改复查' && (
@@ -1468,7 +1495,7 @@ export default function AuditPage() {
                     onChange={(e) => setOnlyShowLastFailed(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
-                  只显示上次不合格模块
+                  {tr('audit.onlyLastFailed')}
                 </label>
               )}
             </div>
@@ -1503,12 +1530,12 @@ export default function AuditPage() {
                       </svg>
                     )}
                   </div>
-                  <span className="text-sm font-medium">{mod.name}</span>
+                  <span className="text-sm font-medium">{getModuleDisplayName(mod.name, language)}</span>
                 </label>
               ))}
             </div>
             {selectedModules.length === 0 && (
-              <p className="mt-3 text-sm text-amber-600">请至少选择一个模块进行复查</p>
+              <p className="mt-3 text-sm text-amber-600">{tr('audit.selectAtLeastOne')}</p>
             )}
           </div>
         )}
@@ -1521,13 +1548,13 @@ export default function AuditPage() {
             onClick={handleSelectAll}
             className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
           >
-            全选
+            {tr('audit.selectAll')}
           </button>
           <button
             onClick={handleClearAll}
             className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
           >
-            清空
+            {tr('audit.clearAll')}
           </button>
           {!isEditMode && (
             <>
@@ -1538,22 +1565,18 @@ export default function AuditPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                保存进度
+                {tr('audit.saveProgress')}
               </button>
               {lastSavedTime && (
                 <span className="text-sm text-slate-500 ml-2">
-                  上次保存：{lastSavedTime.toLocaleTimeString()}
+                  {tr('audit.lastSaved')}：{lastSavedTime.toLocaleTimeString()}
                 </span>
               )}
             </>
           )}
         </div>
         <div className="text-lg font-semibold">
-          {factoryType === 'flat-knit' ? (
-            <span>总得分：<span className="text-blue-600">{currentScore.toFixed(2)}分</span></span>
-          ) : (
-            <span>总得分率：<span className="text-blue-600">{percentage.toFixed(2)}%</span></span>
-          )}
+          <span>{tr('audit.totalScore')}：<span className="text-blue-600">{percentage.toFixed(2)}%</span></span>
         </div>
       </div>
 
@@ -1575,18 +1598,18 @@ export default function AuditPage() {
                     onClick={() => toggleModule(module.id)}
                     className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                   >
-                    <span className={`text-lg font-semibold ${skippedModules.has(module.id) ? 'text-slate-400 line-through' : ''}`}>{module.name}</span>
+                    <span className={`text-lg font-semibold ${skippedModules.has(module.id) ? 'text-slate-400 line-through' : ''}`}>{getModuleDisplayName(module.name, language)}</span>
                     {!skippedModules.has(module.id) && (
                       <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-lg">
                         {factoryType === 'flat-knit' 
-                          ? `${(moduleScores[module.name] ?? 0).toFixed(2)}分` 
+                          ? `${(moduleScores[module.name] ?? 0).toFixed(2)}${tr('audit.scoreSuffix')}`
                           : `${(modulePercentages[module.name] ?? 0).toFixed(1)}%`
                         }
                       </span>
                     )}
                     {skippedModules.has(module.id) && (
                       <span className="px-2 py-1 bg-slate-200 text-slate-500 text-sm rounded-lg">
-                        已跳过
+                        {tr('audit.skipped')}
                       </span>
                     )}
                   </button>
@@ -1738,13 +1761,7 @@ export default function AuditPage() {
                           className="w-full px-6 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{subModuleName}</span>
-                            <span className="text-sm text-slate-500">
-                              {factoryType === 'flat-knit' 
-                                ? `(${subModuleScore.toFixed(2)}分)` 
-                                : `(${subModulePercent.toFixed(1)}%)`
-                              }
-                            </span>
+                            <span className="font-medium">{getSubModuleDisplayName(subModuleName.replace(/（共[\d.]+分）$/, '').replace(/（共[\d.]+分）(?=[^）]*$)/, ''), language)}</span>
                             {isOptional && (
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
@@ -1818,13 +1835,13 @@ export default function AuditPage() {
                                             </span>
                                             {(item.isKey || item.scoreOptions?.some(s => s < 0)) && (
                                               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">
-                                                关键项
+                                                {tr('audit.keyItem')}
                                               </span>
                                             )}
                                             {lastStatus && lastStatus !== '' && (
                                               <span
                                                 className={`text-xs ${
-                                                  lastStatus.includes('合格')
+                                                  isLastPassed(item.id)
                                                     ? 'text-green-600'
                                                     : 'text-red-600'
                                                 }`}
@@ -1843,45 +1860,55 @@ export default function AuditPage() {
                                                   setShowGuidanceModal(true);
                                                 }}
                                                 className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm"
-                                                title="评估指导"
+                                                title={tr('audit.guidanceButton')}
                                               >
                                                 <span className="text-xs font-bold">?</span>
-                                                <span className="text-xs">评估指导</span>
+                                                <span className="text-xs">{tr('audit.guidanceButton')}</span>
                                               </button>
                                             )}
 
-                                            {item.scoreOptions.map((score, idx) => (
-                                              <button
-                                                key={idx}
-                                                onClick={() => !isPenalized && !isSkipped && handleScoreChange(item.id, score)}
-                                                disabled={isPenalized || isSkipped}
-                                                className={`px-5 py-2 rounded-lg text-base font-medium transition-colors ${
-                                                  isPenalized || isSkipped
-                                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                                    : result.selectedScore === score
-                                                      ? score > 0
-                                                        ? 'bg-green-500 text-white'
-                                                        : score < 0
-                                                          ? 'bg-red-500 text-white'
-                                                          : 'bg-slate-500 text-white'
-                                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                }`}
-                                              >
-                                                {score}分
-                                              </button>
-                                            ))}
+                                            {item.scoreOptions.map((score, idx) => {
+                                              const maxScore = item.scoreOptions && item.scoreOptions.length > 0 
+                                                ? Math.max(...item.scoreOptions) 
+                                                : 0;
+                                              const scoreLabel = score > 0 
+                                                ? (score === maxScore ? tr('score.full') : tr('score.half'))
+                                                : score < 0 
+                                                  ? tr('score.negative')
+                                                  : tr('score.zero');
+                                              return (
+                                                <button
+                                                  key={idx}
+                                                  onClick={() => !isPenalized && !isSkipped && handleScoreChange(item.id, score)}
+                                                  disabled={isPenalized || isSkipped}
+                                                  className={`px-5 py-2 rounded-lg text-base font-medium transition-colors ${
+                                                    isPenalized || isSkipped
+                                                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                      : result.selectedScore === score
+                                                        ? score > 0
+                                                          ? 'bg-green-500 text-white'
+                                                          : score < 0
+                                                            ? 'bg-red-500 text-white'
+                                                            : 'bg-slate-500 text-white'
+                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                  }`}
+                                                >
+                                                  {scoreLabel}
+                                                </button>
+                                              );
+                                            })}
                                           </div>
                                         </div>
 
                                         <div className="mt-3">
                                           <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            评论：
+                                            {tr('audit.commentLabel')}
                                           </label>
                                           <textarea
                                             value={result.comment || ''}
                                             onChange={(e) => !isSkipped && handleCommentChange(item.id, e.target.value)}
                                             disabled={isSkipped}
-                                            placeholder="请输入评论..."
+                                            placeholder={tr('audit.commentPlaceholderInline')}
                                             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px] ${isSkipped ? 'bg-slate-100 cursor-not-allowed' : ''}`}
                                           />
                                         </div>
@@ -1890,7 +1917,7 @@ export default function AuditPage() {
                                           {!isSkipped && (
                                             <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
                                               <Camera className="w-4 h-4" />
-                                              <span className="text-sm">拍照</span>
+                                              <span className="text-sm">{tr('audit.photo')}</span>
                                               <input
                                                 type="file"
                                                 accept="image/*"
@@ -1907,7 +1934,7 @@ export default function AuditPage() {
                                             <div className="relative">
                                               <img
                                                 src={result.imagePath}
-                                                alt="证据"
+                                                alt={tr('audit.evidence')}
                                                 className="w-16 h-16 object-cover rounded-lg"
                                               />
                                               <button
@@ -1951,13 +1978,13 @@ export default function AuditPage() {
                                             </span>
                                             {(item.isKey || item.score >= 2) && (
                                               <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
-                                                关键项
+                                                {tr('audit.keyItem')}
                                               </span>
                                             )}
                                             {lastStatus && lastStatus !== '' && (
                                               <span
                                                 className={`text-xs ${
-                                                  lastStatus.includes('合格')
+                                                  isLastPassed(item.id)
                                                     ? 'text-green-600'
                                                     : 'text-red-600'
                                                 }`}
@@ -1993,7 +2020,7 @@ export default function AuditPage() {
                                               )}
                                               {result.isChecked && (
                                                 <div className="mt-1 text-sm text-green-600">
-                                                  {item.id === 'fi2_6' || item.id === 'pfi2_6' ? '✓ 全部合格' : '✓ 已全部满足'}
+                                                  {item.id === 'fi2_6' || item.id === 'pfi2_6' ? tr('audit.allPass') : tr('audit.allMet')}
                                                 </div>
                                               )}
                                             </div>
@@ -2059,13 +2086,13 @@ export default function AuditPage() {
                                           {!result.isChecked && (
                                             <div className="mt-3">
                                               <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                评论：
+                                                {tr('audit.commentLabel')}
                                               </label>
                                               <textarea
                                                 value={result.comment || ''}
                                                 onChange={(e) => !isSkipped && handleCommentChange(item.id, e.target.value)}
                                                 disabled={isSkipped}
-                                                placeholder="请输入评论..."
+                                                placeholder={tr('audit.commentPlaceholderInline')}
                                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px] ${isSkipped ? 'bg-slate-100 cursor-not-allowed' : ''}`}
                                               />
                                             </div>
@@ -2076,7 +2103,7 @@ export default function AuditPage() {
                                           <div className="flex-shrink-0">
                                             <label className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
                                               <Camera className="w-4 h-4" />
-                                              <span className="text-sm">拍照</span>
+                                              <span className="text-sm">{tr('audit.photo')}</span>
                                               <input
                                                 type="file"
                                                 accept="image/*"
@@ -2094,7 +2121,7 @@ export default function AuditPage() {
                                           <div className="flex-shrink-0 relative">
                                             <img
                                               src={result.imagePath}
-                                              alt="证据"
+                                              alt={tr('audit.evidence')}
                                               className="w-16 h-16 object-cover rounded-lg"
                                             />
                                             <button
@@ -2124,23 +2151,23 @@ export default function AuditPage() {
 
       {/* 评估汇总 */}
       <div className="bg-white rounded-2xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold mb-4">评估汇总</h2>
+        <h2 className="text-lg font-semibold mb-4">{tr('audit.summary')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-2">综合评估意见</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{tr('audit.overallComment')}</label>
             <textarea
               value={comments}
               onChange={(e) => setComments(e.target.value)}
-              placeholder="请输入综合评估意见..."
+              placeholder={tr('audit.overallCommentPlaceholder')}
               rows={4}
               className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col justify-between">
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-sm text-slate-500 mb-1">{factoryType === 'flat-knit' ? '总分数' : '得分率'}</div>
+              <div className="text-sm text-slate-500 mb-1">{tr('audit.totalScore')}</div>
               <div className="text-3xl font-bold text-blue-600">
-                {factoryType === 'flat-knit' ? `${currentScore.toFixed(2)}分` : `${percentage.toFixed(2)}%`}
+                {percentage.toFixed(2)}%
               </div>
             </div>
             <button
@@ -2148,7 +2175,7 @@ export default function AuditPage() {
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2"
             >
               <Save className="w-5 h-5" />
-              保存并生成报告
+              {tr('audit.saveAndGenerate')}
             </button>
           </div>
         </div>
@@ -2171,7 +2198,7 @@ export default function AuditPage() {
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-2xl font-bold text-blue-600">?</span>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900">评估指导</h3>
+                <h3 className="text-lg font-semibold text-gray-900">{tr('audit.guidanceButton')}</h3>
               </div>
               <div className="text-gray-700 leading-relaxed mb-4">
                 {currentGuidance}
@@ -2187,7 +2214,7 @@ export default function AuditPage() {
                 onClick={() => setShowGuidanceModal(false)}
                 className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
-                知道了
+                {tr('audit.gotIt')}
               </button>
             </div>
           </div>

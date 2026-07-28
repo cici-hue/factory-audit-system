@@ -18,13 +18,17 @@ import {
 import { toast } from 'sonner';
 import { generatePDF } from '../utils/pdfGenerator';
 import { generateAISummaryPDF, generateAISummary } from '../utils/aiSummaryGenerator';
+import { t, TranslationKey } from '../i18n/translations';
+import { getModuleDisplayName } from '../utils/moduleTranslations';
 
 interface HistoryPageProps {
   onEdit: (record: EvaluationRecord) => void;
 }
 
 export default function HistoryPage({ onEdit }: HistoryPageProps) {
-  const { user, evaluations, factoryList, getEvaluationsByUser, deleteEvaluation } = useApp();
+  const { user, evaluations, factoryList, getEvaluationsByUser, deleteEvaluation, language } = useApp();
+  const tr = (key: TranslationKey) => t(language, key);
+  const isZh = language === 'zh';
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFactory, setFilterFactory] = useState<number | 'all'>('all');
   const [filterType, setFilterType] = useState<'all' | '常规审核' | '整改复查'>('all');
@@ -67,9 +71,9 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
 
   // 处理删除
   const handleDelete = (id: string) => {
-    if (confirm('确定要删除这条评估记录吗？')) {
+    if (confirm(tr('history.deleteConfirm'))) {
       deleteEvaluation(id);
-      toast.success('记录已删除');
+      toast.success(tr('history.deleted'));
     }
   };
 
@@ -109,31 +113,31 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
       });
     }
     
-    await generatePDF(record, lastEvaluation);
-    toast.success('PDF报告已下载');
+    await generatePDF(record, lastEvaluation, language);
+    toast.success(tr('history.pdfDownloaded'));
   };
 
   // 生成AI总结报告
   const handleAISummary = async (record: EvaluationRecord) => {
-    const toastId = toast.loading('AI正在分析评估数据，时间较长，请耐心等待...');
-    
+    const toastId = toast.loading(tr('history.aiGenerating'));
+
     try {
       // 调用AI总结生成
       const aiSummary = await generateAISummary(record);
-      
+
       // 关闭loading toast
       toast.dismiss(toastId);
-      
+
       // 生成PDF报告
       generateAISummaryPDF(record, aiSummary);
-      
-      toast.success('AI总结报告已生成');
+
+      toast.success(tr('history.aiSuccess'));
     } catch (error) {
-      console.error('AI总结生成失败:', error);
+      console.error(isZh ? 'AI总结生成失败:' : 'AI summary generation failed:', error);
       // 关闭loading toast
       toast.dismiss(toastId);
-      const errorMessage = error instanceof Error ? error.message : 'AI总结生成失败，请稍后重试';
-      toast.error(`AI分析失败：${errorMessage}`);
+      const errorMessage = error instanceof Error ? error.message : tr('history.aiFailed');
+      toast.error(`${tr('history.aiAnalysisFailed')}: ${errorMessage}`);
     }
   };
 
@@ -149,8 +153,8 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">历史记录</h1>
-        <p className="text-slate-500 mt-1">查看和管理所有评估记录</p>
+        <h1 className="text-2xl font-bold text-slate-900">{tr('history.title')}</h1>
+        <p className="text-slate-500 mt-1">{tr('history.subtitle')}</p>
       </div>
 
       {/* 搜索和过滤 */}
@@ -161,7 +165,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
-              placeholder="搜索工厂、评估员、评论..."
+              placeholder={tr('history.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -176,7 +180,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
               onChange={(e) => setFilterFactory(e.target.value === 'all' ? 'all' : Number(e.target.value))}
               className="px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">全部工厂</option>
+              <option value="all">{tr('history.allFactories')}</option>
               {factoryList.map((factory) => (
                 <option key={factory.id} value={factory.id}>{factory.name}</option>
               ))}
@@ -191,9 +195,9 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
               onChange={(e) => setFilterType(e.target.value as 'all' | '常规审核' | '整改复查')}
               className="px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">全部类型</option>
-              <option value="常规审核">常规审核</option>
-              <option value="整改复查">整改复查</option>
+              <option value="all">{tr('history.allTypes')}</option>
+              <option value="常规审核">{tr('audit.evalType.regular')}</option>
+              <option value="整改复查">{tr('audit.evalType.rectification')}</option>
             </select>
           </div>
         </div>
@@ -201,7 +205,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
         {/* 统计信息 */}
         <div className="mt-4 pt-4 border-t flex items-center justify-between">
           <span className="text-sm text-slate-500">
-            共找到 <span className="font-semibold text-slate-900">{filteredEvaluations.length}</span> 条记录
+            {tr('history.totalFoundBefore')}<span className="font-semibold text-slate-900">{filteredEvaluations.length}</span>{tr('history.totalFoundAfter')}
           </span>
         </div>
       </div>
@@ -211,7 +215,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
         {filteredEvaluations.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
             <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">暂无评估记录</p>
+            <p className="text-slate-500">{tr('history.noRecords')}</p>
           </div>
         ) : (
           filteredEvaluations.map((record) => (
@@ -235,12 +239,12 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                   </div>
                   {record.supplierName && (
                     <div className="flex items-center gap-2 text-slate-500">
-                      <span className="text-sm">供应商: {record.supplierName}</span>
+                      <span className="text-sm">{tr('history.supplier')}: {record.supplierName}</span>
                     </div>
                   )}
                   {(record.customerName || record.customerNames) && (
                     <div className="flex items-center gap-2 text-slate-500">
-                      <span className="text-sm">客户: {record.customerNames?.join(', ') || record.customerName}</span>
+                      <span className="text-sm">{tr('history.customer')}: {record.customerNames?.join(', ') || record.customerName}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-slate-500">
@@ -254,7 +258,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                         : 'bg-purple-50 text-purple-700'
                     }`}
                   >
-                    {record.evalType}
+                    {record.evalType === '常规审核' ? tr('audit.evalType.regular') : record.evalType === '整改复查' ? tr('audit.evalType.rectification') : tr('audit.evalType.random')}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -279,14 +283,14 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                   <div className="py-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* 评估模块 */}
                     <div>
-                      <h4 className="text-sm font-medium text-slate-700 mb-2">评估模块</h4>
+                      <h4 className="text-sm font-medium text-slate-700 mb-2">{tr('history.auditModules')}</h4>
                       <div className="flex flex-wrap gap-2">
                         {record.selectedModules.map((mod) => (
                           <span
                             key={mod}
                             className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full"
                           >
-                            {mod}
+                            {getModuleDisplayName(mod, language)}
                           </span>
                         ))}
                       </div>
@@ -294,8 +298,8 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
 
                     {/* 评估意见 */}
                     <div>
-                      <h4 className="text-sm font-medium text-slate-700 mb-2">评估意见</h4>
-                      <p className="text-slate-600">{record.comments || '无'}</p>
+                      <h4 className="text-sm font-medium text-slate-700 mb-2">{tr('history.auditComments')}</h4>
+                      <p className="text-slate-600">{record.comments || tr('history.none')}</p>
                     </div>
                   </div>
 
@@ -306,7 +310,7 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                       className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors"
                     >
                       <Download className="w-4 h-4" />
-                      下载报告
+                      {tr('history.download')}
                     </button>
                     {/* 只有管理员或自己的记录才能编辑/删除 */}
                     {(user?.role === 'admin' || user?.role === 'sadmin' || record.evaluatorId === user?.id) && (
@@ -316,14 +320,14 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                           className="flex items-center gap-2 px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg transition-colors"
                         >
                           <Edit className="w-4 h-4" />
-                          编辑
+                          {tr('common.edit')}
                         </button>
                         <button
                           onClick={() => handleDelete(record.id)}
                           className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
-                          删除
+                          {tr('common.delete')}
                         </button>
                       </>
                     )}
@@ -333,9 +337,9 @@ export default function HistoryPage({ onEdit }: HistoryPageProps) {
                     >
                       <div className="flex items-center gap-2">
                         <Brain className="w-4 h-4" />
-                        <span>AI总结</span>
+                        <span>{tr('history.aiSummary')}</span>
                       </div>
-                      <span className="text-[10px] text-purple-500/70">该内容由AI生成，请谨慎参考</span>
+                      <span className="text-[10px] text-purple-500/70">{tr('history.aiNote')}</span>
                     </button>
                   </div>
                 </div>

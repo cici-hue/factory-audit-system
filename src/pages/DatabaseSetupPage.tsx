@@ -2,46 +2,47 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Database, Users, Building2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { t, TranslationKey } from '../i18n/translations';
 
 export default function DatabaseSetupPage() {
-  const { syncData } = useApp();
+  const { syncData, language } = useApp();
+  const tr = (key: TranslationKey, params?: Record<string, string | number>) => t(language, key, params);
+  const isZh = language === 'zh';
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   const setupDatabase = async () => {
     setIsSettingUp(true);
-    setStatus({ type: 'info', message: '开始初始化数据库...' });
+    setStatus({ type: 'info', message: tr('dbsetup.initializing') });
 
     try {
-      // 1. 初始化数据表并创建默认数据
-      setStatus({ type: 'info', message: '初始化数据表...' });
-      
-      // 创建默认用户
-      setStatus({ type: 'info', message: '创建默认用户...' });
+      // 1. Init tables and create default data
+      setStatus({ type: 'info', message: tr('dbsetup.initTables') });
+
+      // Create default users
+      setStatus({ type: 'info', message: tr('dbsetup.createUsers') });
       const defaultUsers = [
-        { username: 'admin', password: 'admin123', name: '管理员', role: 'admin' },
-        { username: 'sadmin', password: 'sadmin123', name: '高级管理员', role: 'sadmin' },
-        { username: 'zhangsan', password: 'zhangsan123', name: '张三', role: 'user' },
-        { username: 'lisi', password: 'lisi123', name: '李四', role: 'user' },
-        { username: 'wangwu', password: 'wangwu123', name: '王五', role: 'user' },
+        { username: 'admin', password: 'admin123', name: isZh ? '管理员' : 'Admin', role: 'admin' },
+        { username: 'sadmin', password: 'sadmin123', name: isZh ? '高级管理员' : 'Super Admin', role: 'sadmin' },
+        { username: 'zhangsan', password: 'zhangsan123', name: tr('mock.zhangsan'), role: 'user' },
+        { username: 'lisi', password: 'lisi123', name: tr('mock.lisi'), role: 'user' },
+        { username: 'wangwu', password: 'wangwu123', name: tr('mock.wangwu'), role: 'user' },
       ];
 
       for (const user of defaultUsers) {
         const { error } = await supabase.from('users').upsert(user, { onConflict: 'username' });
         if (error) {
-          console.error(`创建用户 ${user.username} 失败:`, error);
+          console.error(tr('dbsetup.errCreateUser', { name: user.username }), error);
           throw error;
         }
       }
 
-      // 创建默认工厂
-      setStatus({ type: 'info', message: '创建默认工厂...' });
+      // Create default factories
+      setStatus({ type: 'info', message: tr('dbsetup.createFactories') });
       const defaultFactories = [
-        { name: '华东分厂', address: '上海市浦东新区张江高科技园区', contact: '张经理', phone: '021-88888888' },
-        { name: '华南分厂', address: '广东省深圳市南山区科技园', contact: '李经理', phone: '0755-66666666' },
-        { name: '华北分厂', address: '北京市海淀区中关村科技园区', contact: '王经理', phone: '010-55555555' },
-        { name: '华中分厂', address: '湖北省武汉市东湖新技术开发区', contact: '刘经理', phone: '027-44444444' },
-        { name: '西南分厂', address: '四川省成都市高新区天府软件园', contact: '陈经理', phone: '028-33333333' },
+        { name: tr('mock.eastChinaFactory'), address: tr('mock.eastChinaAddress'), contact: tr('mock.zhangManager'), phone: '021-88888888' },
+        { name: tr('mock.southChinaFactory'), address: tr('mock.southChinaAddress'), contact: tr('mock.liManager'), phone: '0755-66666666' },
+        { name: tr('mock.northChinaFactory'), address: tr('mock.northChinaAddress'), contact: tr('mock.wangManager'), phone: '010-55555555' },
       ];
 
       for (const factory of defaultFactories) {
@@ -51,63 +52,62 @@ export default function DatabaseSetupPage() {
             created_by: 'system'
           });
           if (error) {
-            console.error(`创建工厂 ${factory.name} 失败:`, error);
+            console.error(tr('dbsetup.errCreateFactory', { name: factory.name }), error);
             throw error;
           } else {
-            console.log(`创建工厂 ${factory.name} 成功`);
+            console.log(tr('dbsetup.factoryCreated', { name: factory.name }));
           }
         } catch (error) {
-          console.error(`创建工厂 ${factory.name} 时发生异常:`, error);
+          console.error(tr('dbsetup.errCreateFactory', { name: factory.name }), error);
           throw error;
         }
       }
 
-      // 检查是否创建成功
+      // Check creation success
       const { data: factories, error: factoriesError } = await supabase.from('factories').select('*');
       if (factoriesError) {
-        console.error('检查工厂数据失败:', factoriesError);
+        console.error(tr('dbsetup.checkFactoryFailed'), factoriesError);
         throw factoriesError;
       } else {
-        console.log('工厂数据:', factories);
-        console.log('工厂数量:', factories.length);
+        console.log(tr('dbsetup.factoryCount', { n: factories.length }));
         if (factories.length === 0) {
-          console.error('工厂数据创建失败，数量为0');
-          throw new Error('工厂数据创建失败，数量为0');
+          console.error(tr('dbsetup.factoryCreateFailed'));
+          throw new Error(tr('dbsetup.factoryCreateFailed'));
         }
       }
 
-      // 创建默认供应商
-      setStatus({ type: 'info', message: '创建默认供应商...' });
+      // Create default suppliers
+      setStatus({ type: 'info', message: tr('dbsetup.createSuppliers') });
       const defaultSuppliers = [
-        { name: '深圳供应商', contact: '张三', phone: '13800138001' },
-        { name: '广州供应商', contact: '李四', phone: '13900139001' },
-        { name: '东莞供应商', contact: '王五', phone: '13700137001' },
+        { name: tr('mock.shenzhenSupplier'), contact: tr('mock.zhangsan'), phone: '13800138001' },
+        { name: tr('mock.guangzhouSupplier'), contact: tr('mock.lisi'), phone: '13900139001' },
+        { name: tr('mock.dongguanSupplier'), contact: tr('mock.wangwu'), phone: '13700137001' },
       ];
 
       for (const supplier of defaultSuppliers) {
         const { error } = await supabase.from('suppliers').insert(supplier);
         if (error) {
-          console.error(`创建供应商 ${supplier.name} 失败:`, error);
+          console.error(tr('dbsetup.errCreateSupplier', { name: supplier.name }), error);
           throw error;
         }
       }
 
-      // 5. 刷新数据
-      setStatus({ type: 'info', message: '刷新应用数据...' });
-      console.log('调用syncData函数...');
+      // 5. Refresh data
+      setStatus({ type: 'info', message: tr('dbsetup.refreshData') });
+      console.log(tr('dbsetup.syncData'));
       await syncData();
-      console.log('syncData函数执行完成');
+      console.log(tr('dbsetup.syncComplete'));
 
-      setStatus({ type: 'success', message: '数据库初始化完成！可以开始使用系统了。' });
-      
-      // 延迟一秒后跳转到评估界面
+      setStatus({ type: 'success', message: tr('dbsetup.complete') });
+
+      // Reload after a short delay
       setTimeout(() => {
-        console.log('刷新页面...');
+        console.log(tr('dbsetup.reload'));
         window.location.reload();
       }, 1000);
     } catch (error) {
-      console.error('数据库初始化失败:', error);
-      setStatus({ type: 'error', message: `初始化失败: ${error instanceof Error ? error.message : '未知错误'}` });
+      console.error(tr('dbsetup.initFailed'), error);
+      setStatus({ type: 'error', message: `${tr('dbsetup.initFailed')}: ${error instanceof Error ? error.message : tr('dbsetup.unknownError')}` });
     } finally {
       setIsSettingUp(false);
     }
@@ -120,40 +120,40 @@ export default function DatabaseSetupPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
             <Database className="w-8 h-8 text-blue-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">数据库设置</h1>
-          <p className="text-gray-600">初始化Supabase数据库并创建默认数据</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{tr('dbsetup.title')}</h1>
+          <p className="text-gray-600">{isZh ? '初始化Supabase数据库并创建默认数据' : 'Initialize Supabase database and create default data'}</p>
         </div>
 
         <div className="bg-blue-50 rounded-xl p-4 mb-6">
           <h2 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5" />
-            将创建的内容
+            {tr('dbsetup.createContent')}
           </h2>
           <ul className="space-y-2 text-sm text-blue-800">
             <li className="flex items-center gap-2">
               <Users className="w-4 h-4" />
-              5个默认用户账户
+              {tr('dbsetup.usersCount')}
             </li>
             <li className="flex items-center gap-2">
               <Building2 className="w-4 h-4" />
-              5个默认工厂信息
+              {tr('dbsetup.factoriesCount')}
             </li>
           </ul>
         </div>
 
         <div className="bg-gray-50 rounded-xl p-4 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-3">默认账户</h2>
+          <h2 className="font-semibold text-gray-900 mb-3">{tr('dbsetup.defaultAccounts')}</h2>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">管理员:</span>
+              <span className="text-gray-600">{tr('dbsetup.adminUser')}</span>
               <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">admin / admin123</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">高级管理员:</span>
+              <span className="text-gray-600">{tr('dbsetup.sadminUser')}</span>
               <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">sadmin / sadmin123</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">普通用户:</span>
+              <span className="text-gray-600">{tr('dbsetup.normalUser')}</span>
               <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">zhangsan / zhangsan123</span>
             </div>
           </div>
@@ -182,18 +182,18 @@ export default function DatabaseSetupPage() {
           {isSettingUp ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              初始化中...
+              {tr('dbsetup.initializing2')}
             </>
           ) : (
             <>
               <Database className="w-5 h-5" />
-              开始初始化
+              {tr('dbsetup.startInit')}
             </>
           )}
         </button>
 
         <p className="text-center text-xs text-gray-500 mt-4">
-          此操作将添加默认数据，不会删除现有数据
+          {tr('dbsetup.addNotDelete')}
         </p>
       </div>
     </div>

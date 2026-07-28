@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { t, TranslationKey } from '../i18n/translations';
 
 export default function AdminPage() {
   const {
@@ -40,7 +41,15 @@ export default function AdminPage() {
     syncData,
     user,
     deleteEvaluation,
+    language,
   } = useApp();
+  const tr = (key: TranslationKey, params?: Record<string, string | number>) => t(language, key, params);
+  const isZh = language === 'zh';
+  const getRoleText = (role: string) => {
+    if (role === 'sadmin') return tr('role.sadmin');
+    if (role === 'admin') return tr('role.admin');
+    return tr('role.evaluator');
+  };
   const [activeTab, setActiveTab] = useState<'factory' | 'suppliers' | 'customers' | 'users' | 'records' | 'database'>('factory');
   const [editingFactory, setEditingFactory] = useState<Factory | null>(null);
   const [isAddingFactory, setIsAddingFactory] = useState(false);
@@ -73,10 +82,10 @@ export default function AdminPage() {
 
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 处理添加工厂
+  // Process add factory
   const handleAddFactory = () => {
     if (!newFactoryName.trim()) {
-      toast.error('请输入工厂名称');
+      toast.error(tr('admin.inputFactoryName'));
       return;
     }
 
@@ -88,13 +97,13 @@ export default function AdminPage() {
     addFactory(newFactory);
     setNewFactoryName('');
     setIsAddingFactory(false);
-    toast.success('工厂添加成功');
+    toast.success(tr('admin.factoryAdded'));
   };
 
-  // 处理添加供应商
+  // Process add supplier
   const handleAddSupplier = async () => {
     if (!newSupplierName.trim()) {
-      toast.error('请输入供应商名称');
+      toast.error(tr('admin.inputSupplierName'));
       return;
     }
     try {
@@ -107,10 +116,10 @@ export default function AdminPage() {
       setNewSupplierContact('');
       setNewSupplierPhone('');
       setIsAddingSupplier(false);
-      toast.success('供应商添加成功');
+      toast.success(tr('admin.supplierAdded'));
     } catch (error) {
-      console.error('添加供应商失败:', error);
-      toast.error('添加供应商失败，请检查Supabase连接');
+      console.error(isZh ? '添加供应商失败:' : 'Add supplier failed:', error);
+      toast.error(tr('admin.addFailed'));
     }
   };
 
@@ -120,7 +129,7 @@ export default function AdminPage() {
 
   const handleSaveSupplier = async () => {
     if (!editingSupplier?.name.trim()) {
-      toast.error('请输入供应商名称');
+      toast.error(tr('admin.inputSupplierName'));
       return;
     }
     try {
@@ -130,26 +139,26 @@ export default function AdminPage() {
         phone: (editingSupplier.phone || '').trim(),
       });
       setEditingSupplier(null);
-      toast.success('供应商信息已更新');
+      toast.success(tr('admin.supplierUpdated'));
     } catch (error) {
-      console.error('更新供应商失败:', error);
-      toast.error('更新供应商失败，请检查Supabase连接');
+      console.error(isZh ? '更新供应商失败:' : 'Update supplier failed:', error);
+      toast.error(tr('admin.updateFailed'));
     }
   };
 
   const handleDeleteSupplier = async (id: number) => {
     const isUsed = evaluations.some((e) => e.supplierId === id);
     if (isUsed) {
-      toast.error('该供应商存在评估记录关联，无法删除');
+      toast.error(tr('admin.supplierInUse'));
       return;
     }
-    if (confirm('确定要删除这个供应商吗？')) {
+    if (confirm(tr('admin.confirmDeleteSupplier'))) {
       try {
         await deleteSupplier(id);
-        toast.success('供应商已删除');
+        toast.success(tr('admin.supplierDeleted'));
       } catch (error) {
-        console.error('删除供应商失败:', error);
-        toast.error('删除供应商失败，请检查Supabase连接');
+        console.error(isZh ? '删除供应商失败:' : 'Delete supplier failed:', error);
+        toast.error(tr('admin.updateFailed'));
       }
     }
   };
@@ -173,7 +182,7 @@ export default function AdminPage() {
   const saveEditUser = async () => {
     if (!editingUserId) return;
     if (!editingUsername.trim() || !editingName.trim()) {
-      toast.error('用户名和姓名不能为空');
+      toast.error(tr('admin.usernameNameRequired'));
       return;
     }
     await updateUserInDb(editingUserId, {
@@ -182,13 +191,13 @@ export default function AdminPage() {
       role: editingRole,
       ...(editingPassword.trim() ? { password: editingPassword.trim() } : {}),
     });
-    toast.success('用户信息已更新');
+    toast.success(tr('admin.factoryUpdated'));
     cancelEditUser();
   };
 
   const handleAddUser = async () => {
     if (!newUsername.trim() || !newPassword.trim() || !newName.trim()) {
-      toast.error('用户名、密码、姓名不能为空');
+      toast.error(tr('admin.allRequired'));
       return;
     }
     await addUser({
@@ -197,7 +206,7 @@ export default function AdminPage() {
       name: newName.trim(),
       role: newRole,
     });
-    toast.success('用户已添加');
+    toast.success(tr('admin.userDeleted').replace('deleted', 'added'));
     setIsAddingUser(false);
     setNewUsername('');
     setNewPassword('');
@@ -207,50 +216,50 @@ export default function AdminPage() {
 
   const handleDeleteUser = async (id: string) => {
     if (id === user?.id) {
-      toast.error('不能删除当前登录用户');
+      toast.error(tr('admin.cannotDeleteSelf'));
       return;
     }
-    if (confirm('确定要删除这个用户吗？')) {
+    if (confirm(tr('admin.confirmDeleteUser'))) {
       await deleteUserInDb(id);
-      toast.success('用户已删除');
+      toast.success(tr('admin.userDeleted'));
     }
   };
 
-  // 处理编辑工厂
+  // Process edit factory
   const handleEditFactory = (factory: Factory) => {
     setEditingFactory({ ...factory });
   };
 
-  // 保存编辑
+  // Save edit
   const handleSaveFactory = () => {
     if (!editingFactory?.name.trim()) {
-      toast.error('请输入工厂名称');
+      toast.error(tr('admin.inputFactoryName'));
       return;
     }
 
     updateFactory(editingFactory.id, editingFactory);
     setEditingFactory(null);
-    toast.success('工厂信息已更新');
+    toast.success(tr('admin.factoryUpdated'));
   };
 
-  // 处理删除工厂
+  // Process delete factory
   const handleDeleteFactory = (id: number) => {
     const hasEvaluations = evaluations.some(e => e.factoryId === id);
     if (hasEvaluations) {
-      toast.error('该工厂存在评估记录，无法删除');
+      toast.error(tr('admin.factoryHasEval'));
       return;
     }
 
-    if (confirm('确定要删除这个工厂吗？')) {
+    if (confirm(tr('admin.confirmDeleteFactory'))) {
       deleteFactory(id);
-      toast.success('工厂已删除');
+      toast.success(tr('admin.factoryDeleted'));
     }
   };
 
-  // 处理添加客户
+  // Process add customer
   const handleAddCustomer = async () => {
     if (!newCustomerName.trim()) {
-      toast.error('请输入客户名称');
+      toast.error(tr('admin.inputCustomerName'));
       return;
     }
     try {
@@ -265,10 +274,10 @@ export default function AdminPage() {
       setNewCustomerPhone('');
       setNewCustomerAddress('');
       setIsAddingCustomer(false);
-      toast.success('客户添加成功');
+      toast.success(tr('admin.customerAdded'));
     } catch (error) {
-      console.error('添加客户失败:', error);
-      toast.error('添加客户失败，请检查Supabase连接');
+      console.error(isZh ? '添加客户失败:' : 'Add customer failed:', error);
+      toast.error(tr('admin.addFailed'));
     }
   };
 
@@ -278,7 +287,7 @@ export default function AdminPage() {
 
   const handleSaveCustomer = async () => {
     if (!editingCustomer?.name.trim()) {
-      toast.error('请输入客户名称');
+      toast.error(tr('admin.inputCustomerName'));
       return;
     }
     try {
@@ -289,92 +298,92 @@ export default function AdminPage() {
         address: (editingCustomer.address || '').trim(),
       });
       setEditingCustomer(null);
-      toast.success('客户信息已更新');
+      toast.success(tr('admin.customerUpdated'));
     } catch (error) {
-      console.error('更新客户失败:', error);
-      toast.error('更新客户失败，请检查Supabase连接');
+      console.error(isZh ? '更新客户失败:' : 'Update customer failed:', error);
+      toast.error(tr('admin.updateFailed'));
     }
   };
 
   const handleDeleteCustomer = async (id: number) => {
     const isUsed = evaluations.some((e) => e.customerId === id);
     if (isUsed) {
-      toast.error('该客户存在评估记录关联，无法删除');
+      toast.error(tr('admin.customerInUse'));
       return;
     }
-    if (confirm('确定要删除这个客户吗？')) {
+    if (confirm(tr('admin.confirmDeleteCustomer'))) {
       try {
         await deleteCustomer(id);
-        toast.success('客户已删除');
+        toast.success(tr('admin.customerDeleted'));
       } catch (error) {
-        console.error('删除客户失败:', error);
-        toast.error('删除客户失败，请检查Supabase连接');
+        console.error(isZh ? '删除客户失败:' : 'Delete customer failed:', error);
+        toast.error(tr('admin.updateFailed'));
       }
     }
   };
 
-  // 处理删除评估记录
+  // Process delete evaluation record
   const handleDeleteEvaluation = async (id: string) => {
-    if (confirm('确定要删除这条评估记录吗？此操作不可恢复。')) {
+    if (confirm(tr('admin.confirmDeleteRecord'))) {
       try {
         await deleteEvaluation(id);
-        toast.success('评估记录已删除');
+        toast.success(tr('admin.recordDeleted'));
       } catch (error) {
-        toast.error('删除失败');
+        toast.error(tr('admin.deleteFailed'));
       }
     }
   };
 
-  // 手动同步数据
+  // Manual sync data
   const handleSyncData = async () => {
     setIsSyncing(true);
     try {
       await syncData();
-      toast.success('数据同步完成');
+      toast.success(tr('admin.syncComplete'));
     } catch (error) {
-      console.error('同步数据失败:', error);
-      toast.error('同步失败，请检查Supabase连接');
+      console.error(isZh ? '同步数据失败:' : 'Sync data failed:', error);
+      toast.error(tr('admin.syncFailed'));
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // 重新初始化数据库
+  // Reinitialize database
   const handleResetDatabase = async () => {
-    if (!confirm('确定要重新初始化数据库吗？这将创建默认用户和工厂。')) {
+    if (!confirm(tr('admin.confirmResetDb'))) {
       return;
     }
 
     try {
-      // 创建默认用户
+      // Create default users
       const defaultUsers = [
-        { username: 'admin', password: 'admin123', name: '管理员', role: 'admin' },
-        { username: 'sadmin', password: 'sadmin123', name: '高级管理员', role: 'sadmin' },
-        { username: 'zhangsan', password: 'zhangsan123', name: '张三', role: 'user' },
-        { username: 'lisi', password: 'lisi123', name: '李四', role: 'user' },
-        { username: 'wangwu', password: 'wangwu123', name: '王五', role: 'user' },
+        { username: 'admin', password: 'admin123', name: tr('admin.defaultUserAdmin'), role: 'admin' },
+        { username: 'sadmin', password: 'sadmin123', name: tr('admin.defaultUserSadmin'), role: 'sadmin' },
+        { username: 'zhangsan', password: 'zhangsan123', name: isZh ? '张三' : 'Zhang San', role: 'user' },
+        { username: 'lisi', password: 'lisi123', name: isZh ? '李四' : 'Li Si', role: 'user' },
+        { username: 'wangwu', password: 'wangwu123', name: isZh ? '王五' : 'Wang Wu', role: 'user' },
       ];
 
       for (const user of defaultUsers) {
         await supabase.from('users').upsert(user, { onConflict: 'username' });
       }
 
-      // 创建默认工厂
+      // Create default factories
       const defaultFactories = [
-        { name: '华东分厂', address: '上海市浦东新区', contact: '张经理', phone: '021-88888888' },
-        { name: '华南分厂', address: '广东省深圳市', contact: '李经理', phone: '0755-66666666' },
-        { name: '华北分厂', address: '北京市海淀区', contact: '王经理', phone: '010-55555555' },
+        { name: isZh ? '华东分厂' : 'East China Factory', address: isZh ? '上海市浦东新区' : 'Pudong, Shanghai', contact: isZh ? '张经理' : 'Mr. Zhang', phone: '021-88888888' },
+        { name: isZh ? '华南分厂' : 'South China Factory', address: isZh ? '广东省深圳市' : 'Shenzhen, Guangdong', contact: isZh ? '李经理' : 'Mr. Li', phone: '0755-66666666' },
+        { name: isZh ? '华北分厂' : 'North China Factory', address: isZh ? '北京市海淀区' : 'Haidian, Beijing', contact: isZh ? '王经理' : 'Mr. Wang', phone: '010-55555555' },
       ];
 
       for (const factory of defaultFactories) {
         await supabase.from('factories').insert(factory);
       }
 
-      // 创建默认供应商
+      // Create default suppliers
       const defaultSuppliers = [
-        { name: '深圳供应商', contact: '张三', phone: '13800138001' },
-        { name: '广州供应商', contact: '李四', phone: '13900139001' },
-        { name: '东莞供应商', contact: '王五', phone: '13700137001' },
+        { name: isZh ? '深圳供应商' : 'Shenzhen Supplier', contact: isZh ? '张三' : 'Zhang San', phone: '13800138001' },
+        { name: isZh ? '广州供应商' : 'Guangzhou Supplier', contact: isZh ? '李四' : 'Li Si', phone: '13900139001' },
+        { name: isZh ? '东莞供应商' : 'Dongguan Supplier', contact: isZh ? '王五' : 'Wang Wu', phone: '13700137001' },
       ];
 
       for (const supplier of defaultSuppliers) {
@@ -382,21 +391,21 @@ export default function AdminPage() {
       }
 
       await syncData();
-      toast.success('数据库初始化完成');
+      toast.success(tr('admin.dbInitialized'));
     } catch (error) {
-      toast.error('初始化失败');
+      toast.error(tr('admin.initFailed'));
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
+      {/* Page Title */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">系统管理</h1>
-        <p className="text-slate-500 mt-1">管理系统配置和数据维护</p>
+        <h1 className="text-2xl font-bold text-slate-900">{tr('admin.title')}</h1>
+        <p className="text-slate-500 mt-1">{tr('admin.subtitle')}</p>
       </div>
 
-      {/* Tab 导航 */}
+      {/* Tab Navigation */}
       <div className="flex gap-2 border-b">
         <button
           onClick={() => setActiveTab('factory')}
@@ -408,7 +417,7 @@ export default function AdminPage() {
         >
           <div className="flex items-center gap-2">
             <Building2 className="w-5 h-5" />
-            工厂管理
+            {tr('admin.factoryTab')}
           </div>
           {activeTab === 'factory' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
@@ -424,7 +433,7 @@ export default function AdminPage() {
         >
           <div className="flex items-center gap-2">
             <Truck className="w-5 h-5" />
-            供应商管理
+            {tr('admin.supplierTab')}
           </div>
           {activeTab === 'suppliers' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
@@ -440,7 +449,7 @@ export default function AdminPage() {
         >
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            客户管理
+            {tr('admin.customerTab')}
           </div>
           {activeTab === 'customers' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
@@ -456,7 +465,7 @@ export default function AdminPage() {
         >
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            评估人员维护
+            {tr('admin.userTab')}
           </div>
           {activeTab === 'users' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
@@ -472,7 +481,7 @@ export default function AdminPage() {
         >
           <div className="flex items-center gap-2">
             <Database className="w-5 h-5" />
-            记录维护
+            {tr('admin.recordsTab')}
           </div>
           {activeTab === 'records' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
@@ -488,7 +497,7 @@ export default function AdminPage() {
         >
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
-            数据库
+            {tr('admin.databaseTab')}
           </div>
           {activeTab === 'database' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
@@ -496,21 +505,21 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* 工厂管理 */}
+      {/* Factory Management */}
       {activeTab === 'factory' && (
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
           <div className="px-6 py-4 border-b flex items-center justify-between">
-            <h3 className="font-semibold">工厂列表</h3>
+            <h3 className="font-semibold">{tr('admin.factoryList')}</h3>
             <button
               onClick={() => setIsAddingFactory(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
-              添加工厂
+              {tr('admin.addFactory')}
             </button>
           </div>
 
-          {/* 添加工厂表单 */}
+          {/* Add Factory Form */}
           {isAddingFactory && (
             <div className="px-6 py-4 bg-blue-50 border-b">
               <div className="flex items-center gap-4">
@@ -518,7 +527,7 @@ export default function AdminPage() {
                   type="text"
                   value={newFactoryName}
                   onChange={(e) => setNewFactoryName(e.target.value)}
-                  placeholder="请输入工厂名称"
+                  placeholder={tr('admin.factoryName')}
                   className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
@@ -527,7 +536,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  保存
+                  {tr('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -537,18 +546,18 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
-                  取消
+                  {tr('common.cancel')}
                 </button>
               </div>
             </div>
           )}
 
-          {/* 工厂列表 */}
+          {/* Factory List */}
           <div className="divide-y">
             {factoryList.length === 0 ? (
               <div className="px-6 py-12 text-center text-slate-400">
                 <Building2 className="w-12 h-12 mx-auto mb-4" />
-                <p>暂无工厂数据</p>
+                <p>{tr('admin.noFactory')}</p>
               </div>
             ) : (
               factoryList.map((factory) => (
@@ -572,14 +581,14 @@ export default function AdminPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                       >
                         <Save className="w-4 h-4" />
-                        保存
+                        {tr('common.save')}
                       </button>
                       <button
                         onClick={() => setEditingFactory(null)}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                       >
                         <X className="w-4 h-4" />
-                        取消
+                        {tr('common.cancel')}
                       </button>
                     </div>
                   ) : (
@@ -590,7 +599,7 @@ export default function AdminPage() {
                         </div>
                         <div>
                           <p className="font-medium">{factory.name}</p>
-                          <p className="text-sm text-slate-400">ID: {factory.id}</p>
+                          <p className="text-sm text-slate-400">{tr('common.id')}: {factory.id}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -616,21 +625,21 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 供应商管理 */}
+      {/* Supplier Management */}
       {activeTab === 'suppliers' && (
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
           <div className="px-6 py-4 border-b flex items-center justify-between">
-            <h3 className="font-semibold">供应商列表</h3>
+            <h3 className="font-semibold">{tr('admin.supplierList')}</h3>
             <button
               onClick={() => setIsAddingSupplier(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
-              添加供应商
+              {tr('admin.addSupplier')}
             </button>
           </div>
 
-          {/* 添加供应商表单 */}
+          {/* Add Supplier Form */}
           {isAddingSupplier && (
             <div className="px-6 py-4 bg-blue-50 border-b">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -638,7 +647,7 @@ export default function AdminPage() {
                   type="text"
                   value={newSupplierName}
                   onChange={(e) => setNewSupplierName(e.target.value)}
-                  placeholder="供应商名称"
+                  placeholder={tr('admin.supplierName')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
@@ -646,14 +655,14 @@ export default function AdminPage() {
                   type="text"
                   value={newSupplierContact}
                   onChange={(e) => setNewSupplierContact(e.target.value)}
-                  placeholder="联系人（可选）"
+                  placeholder={tr('admin.contactOptional')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input
                   type="text"
                   value={newSupplierPhone}
                   onChange={(e) => setNewSupplierPhone(e.target.value)}
-                  placeholder="电话（可选）"
+                  placeholder={tr('admin.phoneOptional')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -663,7 +672,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  保存
+                  {tr('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -675,18 +684,18 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
-                  取消
+                  {tr('common.cancel')}
                 </button>
               </div>
             </div>
           )}
 
-          {/* 供应商列表 */}
+          {/* Supplier List */}
           <div className="divide-y">
             {supplierList.length === 0 ? (
               <div className="px-6 py-12 text-center text-slate-400">
                 <Truck className="w-12 h-12 mx-auto mb-4" />
-                <p>暂无供应商数据</p>
+                <p>{tr('admin.noSupplier')}</p>
               </div>
             ) : (
               supplierList.map((s) => (
@@ -708,28 +717,28 @@ export default function AdminPage() {
                         value={editingSupplier.contact || ''}
                         onChange={(e) => setEditingSupplier({ ...editingSupplier, contact: e.target.value })}
                         className="w-48 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="联系人"
+                        placeholder={tr('admin.contact')}
                       />
                       <input
                         type="text"
                         value={editingSupplier.phone || ''}
                         onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })}
                         className="w-48 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="电话"
+                        placeholder={tr('admin.phone')}
                       />
                       <button
                         onClick={handleSaveSupplier}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                       >
                         <Save className="w-4 h-4" />
-                        保存
+                        {tr('common.save')}
                       </button>
                       <button
                         onClick={() => setEditingSupplier(null)}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                       >
                         <X className="w-4 h-4" />
-                        取消
+                        {tr('common.cancel')}
                       </button>
                     </div>
                   ) : (
@@ -741,7 +750,7 @@ export default function AdminPage() {
                         <div>
                           <p className="font-medium">{s.name}</p>
                           <p className="text-sm text-slate-400">
-                            {s.contact ? `联系人：${s.contact}` : '联系人：-'} | {s.phone ? `电话：${s.phone}` : '电话：-'}
+                            {tr('admin.contactLabel')}{s.contact || '-'} | {tr('admin.phoneLabel')}{s.phone || '-'}
                           </p>
                         </div>
                       </div>
@@ -768,20 +777,20 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 客户管理 */}
+      {/* Customer Management */}
       {activeTab === 'customers' && (
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
           <div className="px-6 py-4 border-b flex items-center justify-between">
             <div>
-              <h3 className="font-semibold">客户列表</h3>
-              <p className="text-sm text-slate-500 mt-1">管理客户信息</p>
+              <h3 className="font-semibold">{tr('admin.customerList')}</h3>
+              <p className="text-sm text-slate-500 mt-1">{tr('admin.manageCustomer')}</p>
             </div>
             <button
               onClick={() => setIsAddingCustomer(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
-              添加客户
+              {tr('admin.addCustomer')}
             </button>
           </div>
 
@@ -792,7 +801,7 @@ export default function AdminPage() {
                   type="text"
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
-                  placeholder="客户名称"
+                  placeholder={tr('admin.customerName')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
@@ -800,21 +809,21 @@ export default function AdminPage() {
                   type="text"
                   value={newCustomerContact}
                   onChange={(e) => setNewCustomerContact(e.target.value)}
-                  placeholder="联系人"
+                  placeholder={tr('admin.contact')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input
                   type="text"
                   value={newCustomerPhone}
                   onChange={(e) => setNewCustomerPhone(e.target.value)}
-                  placeholder="电话"
+                  placeholder={tr('admin.phone')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input
                   type="text"
                   value={newCustomerAddress}
                   onChange={(e) => setNewCustomerAddress(e.target.value)}
-                  placeholder="地址"
+                  placeholder={tr('admin.address')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -824,7 +833,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  保存
+                  {tr('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -837,18 +846,18 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
-                  取消
+                  {tr('common.cancel')}
                 </button>
               </div>
             </div>
           )}
 
-          {/* 客户列表 */}
+          {/* Customer List */}
           <div className="divide-y">
             {customerList.length === 0 ? (
               <div className="px-6 py-12 text-center text-slate-400">
                 <Users className="w-12 h-12 mx-auto mb-4" />
-                <p>暂无客户数据</p>
+                <p>{tr('admin.noCustomer')}</p>
               </div>
             ) : (
               customerList.map((c) => (
@@ -870,35 +879,35 @@ export default function AdminPage() {
                         value={editingCustomer.contact || ''}
                         onChange={(e) => setEditingCustomer({ ...editingCustomer, contact: e.target.value })}
                         className="w-48 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="联系人"
+                        placeholder={tr('admin.contact')}
                       />
                       <input
                         type="text"
                         value={editingCustomer.phone || ''}
                         onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
                         className="w-48 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="电话"
+                        placeholder={tr('admin.phone')}
                       />
                       <input
                         type="text"
                         value={editingCustomer.address || ''}
                         onChange={(e) => setEditingCustomer({ ...editingCustomer, address: e.target.value })}
                         className="w-48 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="地址"
+                        placeholder={tr('admin.address')}
                       />
                       <button
                         onClick={handleSaveCustomer}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                       >
                         <Save className="w-4 h-4" />
-                        保存
+                        {tr('common.save')}
                       </button>
                       <button
                         onClick={() => setEditingCustomer(null)}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                       >
                         <X className="w-4 h-4" />
-                        取消
+                        {tr('common.cancel')}
                       </button>
                     </div>
                   ) : (
@@ -910,8 +919,8 @@ export default function AdminPage() {
                         <div>
                           <p className="font-medium">{c.name}</p>
                           <p className="text-sm text-slate-400">
-                            {c.contact ? `联系人：${c.contact}` : '联系人：-'} | {c.phone ? `电话：${c.phone}` : '电话：-'}
-                            {c.address ? ` | 地址：${c.address}` : ''}
+                            {c.contact ? `${tr('admin.contactLabel')}${c.contact}` : tr('admin.noContact')} | {c.phone ? `${tr('admin.phoneLabel')}${c.phone}` : tr('admin.noPhone')}
+                            {c.address ? ` | ${tr('admin.addressLabel')}${c.address}` : ''}
                           </p>
                         </div>
                       </div>
@@ -938,20 +947,20 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 评估人员维护 */}
+      {/* Evaluator Management */}
       {activeTab === 'users' && (
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
           <div className="px-6 py-4 border-b flex items-center justify-between">
             <div>
-              <h3 className="font-semibold">用户列表</h3>
-              <p className="text-sm text-slate-500 mt-1">仅高级管理员(sadmin)可维护</p>
+              <h3 className="font-semibold">{tr('admin.userList')}</h3>
+              <p className="text-sm text-slate-500 mt-1">{tr('admin.sadminOnly')}</p>
             </div>
             <button
               onClick={() => setIsAddingUser(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
-              添加用户
+              {tr('admin.addUser')}
             </button>
           </div>
 
@@ -962,7 +971,7 @@ export default function AdminPage() {
                   type="text"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="用户名"
+                  placeholder={tr('admin.username')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
@@ -970,14 +979,14 @@ export default function AdminPage() {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="密码"
+                  placeholder={tr('admin.password')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="姓名"
+                  placeholder={tr('admin.name')}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <select
@@ -985,9 +994,9 @@ export default function AdminPage() {
                   onChange={(e) => setNewRole(e.target.value as any)}
                   className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="user">评估员</option>
-                  <option value="admin">管理员</option>
-                  <option value="sadmin">高级管理员</option>
+                  <option value="user">{tr('admin.evaluatorRole')}</option>
+                  <option value="admin">{tr('admin.adminRole')}</option>
+                  <option value="sadmin">{tr('admin.sadminRole')}</option>
                 </select>
               </div>
               <div className="mt-3 flex items-center gap-3">
@@ -996,7 +1005,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  保存
+                  {tr('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -1009,7 +1018,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
-                  取消
+                  {tr('common.cancel')}
                 </button>
               </div>
             </div>
@@ -1019,7 +1028,7 @@ export default function AdminPage() {
             {userList.length === 0 ? (
               <div className="px-6 py-12 text-center text-slate-400">
                 <Users className="w-12 h-12 mx-auto mb-4" />
-                <p>暂无用户数据（请先同步或检查权限）</p>
+                <p>{tr('admin.noUser')}</p>
               </div>
             ) : (
               userList.map((u: any) => (
@@ -1031,7 +1040,7 @@ export default function AdminPage() {
                         value={editingUsername}
                         onChange={(e) => setEditingUsername(e.target.value)}
                         className="w-44 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="用户名"
+                        placeholder={tr('admin.username')}
                         autoFocus
                       />
                       <input
@@ -1039,37 +1048,37 @@ export default function AdminPage() {
                         value={editingName}
                         onChange={(e) => setEditingName(e.target.value)}
                         className="w-44 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="姓名"
+                        placeholder={tr('admin.name')}
                       />
                       <select
                         value={editingRole}
                         onChange={(e) => setEditingRole(e.target.value as any)}
                         className="w-40 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="user">评估员</option>
-                        <option value="admin">管理员</option>
-                        <option value="sadmin">高级管理员</option>
+                        <option value="user">{tr('admin.evaluatorRole')}</option>
+                        <option value="admin">{tr('admin.adminRole')}</option>
+                        <option value="sadmin">{tr('admin.sadminRole')}</option>
                       </select>
                       <input
                         type="password"
                         value={editingPassword}
                         onChange={(e) => setEditingPassword(e.target.value)}
                         className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="新密码（可选，留空不修改）"
+                        placeholder={tr('admin.newPasswordOptional')}
                       />
                       <button
                         onClick={saveEditUser}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                       >
                         <Save className="w-4 h-4" />
-                        保存
+                        {tr('common.save')}
                       </button>
                       <button
                         onClick={cancelEditUser}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors"
                       >
                         <X className="w-4 h-4" />
-                        取消
+                        {tr('common.cancel')}
                       </button>
                     </div>
                   ) : (
@@ -1083,7 +1092,7 @@ export default function AdminPage() {
                             {u.name} <span className="text-slate-400 text-sm">({u.username})</span>
                           </p>
                           <p className="text-sm text-slate-400">
-                            角色：{u.role === 'sadmin' ? '高级管理员' : u.role === 'admin' ? '管理员' : '评估员'} | ID: {u.id}
+                            {tr('admin.roleLabelPrefix')}{getRoleText(u.role)} | {tr('common.id')}: {u.id}
                           </p>
                         </div>
                       </div>
@@ -1110,13 +1119,13 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 记录维护 */}
+      {/* Records Management */}
       {activeTab === 'records' && (
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
           <div className="px-6 py-4 border-b">
-            <h3 className="font-semibold">评估记录管理</h3>
+            <h3 className="font-semibold">{tr('admin.records')}</h3>
             <p className="text-sm text-slate-500 mt-1">
-              当前系统共有 <span className="font-medium text-slate-900">{evaluations.length}</span> 条评估记录
+              {tr('admin.totalRecords', { n: evaluations.length })}
             </p>
           </div>
 
@@ -1124,12 +1133,12 @@ export default function AdminPage() {
             {evaluations.length === 0 ? (
               <div className="px-6 py-12 text-center text-slate-400">
                 <Database className="w-12 h-12 mx-auto mb-4" />
-                <p>暂无评估记录</p>
+                <p>{tr('admin.noRecord')}</p>
               </div>
             ) : (
               evaluations
                 .sort((a, b) => new Date(b.evalDate).getTime() - new Date(a.evalDate).getTime())
-                .map((record, index) => (
+                .map((record) => (
                   <div
                     key={record.id}
                     className="px-6 py-4 flex items-center justify-between hover:bg-slate-50"
@@ -1143,7 +1152,7 @@ export default function AdminPage() {
                           {record.factoryName} - {record.evalDate}
                         </p>
                         <p className="text-sm text-slate-400">
-                          评估员：{record.evaluator} | 得分：{record.overallPercent.toFixed(2)}%
+                          {tr('admin.evaluatorLabel', { name: record.evaluator })} | {tr('admin.scoreLabel', { score: record.overallPercent.toFixed(2) })}
                         </p>
                       </div>
                     </div>
@@ -1152,7 +1161,7 @@ export default function AdminPage() {
                       className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
-                      删除
+                      {tr('common.delete')}
                     </button>
                   </div>
                 ))
@@ -1161,22 +1170,22 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 数据库管理 */}
+      {/* Database Management */}
       {activeTab === 'database' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
             <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold">数据同步</h3>
+              <h3 className="font-semibold">{tr('admin.dataSync')}</h3>
               <p className="text-sm text-slate-500 mt-1">
-                从云端数据库同步最新数据到本地
+                {tr('admin.syncDesc')}
               </p>
             </div>
             <div className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">手动同步数据</p>
+                  <p className="font-medium">{tr('admin.manualSync')}</p>
                   <p className="text-sm text-slate-500 mt-1">
-                    点击按钮从Supabase云端拉取最新数据
+                    {tr('admin.manualSyncDesc')}
                   </p>
                 </div>
                 <button
@@ -1185,7 +1194,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl transition-colors"
                 >
                   <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  {isSyncing ? '同步中...' : '同步数据'}
+                  {isSyncing ? tr('admin.syncing') : tr('admin.syncData')}
                 </button>
               </div>
             </div>
@@ -1193,16 +1202,16 @@ export default function AdminPage() {
 
           <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
             <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold">数据库信息</h3>
+              <h3 className="font-semibold">{tr('admin.dbInfo')}</h3>
             </div>
             <div className="p-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl">
-                  <p className="text-sm text-slate-500">工厂数量</p>
+                  <p className="text-sm text-slate-500">{tr('admin.factoryCount')}</p>
                   <p className="text-2xl font-bold text-slate-900">{factoryList.length}</p>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl">
-                  <p className="text-sm text-slate-500">评估记录</p>
+                  <p className="text-sm text-slate-500">{tr('admin.evalRecords')}</p>
                   <p className="text-2xl font-bold text-slate-900">{evaluations.length}</p>
                 </div>
               </div>
@@ -1212,31 +1221,31 @@ export default function AdminPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-amber-800">数据库初始化</p>
+              <p className="font-medium text-amber-800">{tr('admin.dbInit')}</p>
               <p className="text-sm text-amber-700 mt-1">
-                如果数据库为空或需要重置，可以点击下方按钮重新初始化默认数据。
+                {tr('admin.dbInitDesc')}
               </p>
               <button
                 onClick={handleResetDatabase}
                 className="mt-3 flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
               >
                 <Database className="w-4 h-4" />
-                重新初始化数据库
+                {tr('admin.resetDb')}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 危险提示 */}
+      {/* Warning Tips */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-medium text-amber-800">操作提示</p>
+          <p className="font-medium text-amber-800">{tr('admin.tip')}</p>
           <ul className="text-sm text-amber-700 mt-1 space-y-1">
-            <li>• 删除工厂将同时删除该工厂的所有评估记录</li>
-            <li>• 评估记录删除后无法恢复，请谨慎操作</li>
-            <li>• 只有高级管理员(sadmin)可以访问此页面</li>
+            <li>• {tr('admin.tip1')}</li>
+            <li>• {tr('admin.tip2')}</li>
+            <li>• {tr('admin.tip3')}</li>
           </ul>
         </div>
       </div>

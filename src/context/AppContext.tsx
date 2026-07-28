@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, Factory, EvaluationRecord, AuditResult, Supplier, Customer, FactoryType } from '../types';
 import { factoryService, evaluationService, userService, supplierService, customerService } from '../lib/database';
 import { factories as defaultFactories, suppliers as defaultSuppliers, mockEvaluations } from '../data/mockData';
+import { t } from '../i18n/translations';
 
 interface AppContextType {
   // 认证状态
@@ -16,6 +17,10 @@ interface AppContextType {
   // 工厂类型
   factoryType: FactoryType;
   setFactoryType: (type: FactoryType) => void;
+
+  // 语言
+  language: 'zh' | 'en';
+  setLanguage: (lang: 'zh' | 'en') => void;
 
   // 工厂数据
   factoryList: Factory[];
@@ -66,13 +71,22 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// 模拟用户数据
-const mockUsers: { [key: string]: { password: string; name: string; role: 'admin' | 'sadmin' | 'user' } } = {
+// 模拟用户数据（中文）
+const mockUsersZh: { [key: string]: { password: string; name: string; role: 'admin' | 'sadmin' | 'user' } } = {
   'admin': { password: 'admin123', name: '管理员', role: 'admin' },
   'sadmin': { password: 'sadmin123', name: '高级管理员', role: 'sadmin' },
   'zhangsan': { password: 'zhangsan123', name: '张三', role: 'user' },
   'lisi': { password: 'lisi123', name: '李四', role: 'user' },
   'wangwu': { password: 'wangwu123', name: '王五', role: 'user' },
+};
+
+// 模拟用户数据（英文）
+const mockUsersEn: { [key: string]: { password: string; name: string; role: 'admin' | 'sadmin' | 'user' } } = {
+  'admin': { password: 'admin123', name: 'Admin', role: 'admin' },
+  'sadmin': { password: 'sadmin123', name: 'Super Admin', role: 'sadmin' },
+  'zhangsan': { password: 'zhangsan123', name: 'Zhang San', role: 'user' },
+  'lisi': { password: 'lisi123', name: 'Li Si', role: 'user' },
+  'wangwu': { password: 'wangwu123', name: 'Wang Wu', role: 'user' },
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -96,14 +110,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return (saved as FactoryType) || 'light-woven';
   });
 
+  // 语言状态
+  const [language, setLanguage] = useState<'zh' | 'en'>(() => {
+    const saved = localStorage.getItem('language');
+    return (saved as 'zh' | 'en') || 'zh';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
   // 从Supabase加载数据
   const syncData = async () => {
-    console.log('开始同步数据...');
+    console.log(language === 'zh' ? '开始同步数据...' : 'Starting data sync...');
     setIsLoading(true);
     setError(null);
     try {
-      console.log('当前时间:', new Date().toISOString());
-      
+      console.log(language === 'zh' ? '当前时间:' : 'Current time:', new Date().toISOString());
+
       // 并行加载所有数据，任何一个失败都应该抛出错误
       const [factories, suppliers, customers, users, evals] = await Promise.all([
         factoryService.getFactories(),
@@ -113,7 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         evaluationService.getEvaluations()
       ]);
 
-      console.log('同步数据完成:', {
+      console.log(language === 'zh' ? '同步数据完成:' : 'Data sync complete:', {
         factories: factories.length,
         suppliers: suppliers.length,
         customers: customers.length,
@@ -128,37 +152,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // 只有 sadmin 才需要用户列表；其他角色清空避免误用
       setUserList(user?.role === 'sadmin' ? users : []);
       setEvaluations(evals);
-      
-      console.log('数据更新完成');
+
+      console.log(language === 'zh' ? '数据更新完成' : 'Data update complete');
     } catch (error) {
-      console.error('同步数据失败:', error);
-      setError(error instanceof Error ? error.message : '同步数据失败，请检查网络连接和Supabase配置');
+      console.error(language === 'zh' ? '同步数据失败:' : 'Sync data failed:', error);
+      setError(error instanceof Error ? error.message : t(language, 'common.syncDataFailed'));
       // 不抛出错误，这样用户就可以看到错误信息，而不是被强制登出
     } finally {
       setIsLoading(false);
-      console.log('同步数据操作完成');
+      console.log(language === 'zh' ? '同步数据操作完成' : 'Data sync operation complete');
     }
   };
 
   // 初始化加载
   useEffect(() => {
-    console.log('开始初始化加载...');
-    
+    console.log(language === 'zh' ? '开始初始化加载...' : 'Starting initial load...');
+
     // 先从localStorage恢复登录状态
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
       setIsLoggedIn(true);
-      console.log('从localStorage恢复登录状态:', parsedUser);
+      console.log(language === 'zh' ? '从localStorage恢复登录状态:' : 'Restored login state from localStorage:', parsedUser);
     }
 
     // 同步Supabase数据
-    console.log('调用syncData函数...');
+    console.log(language === 'zh' ? '调用syncData函数...' : 'Calling syncData function...');
     syncData().then(() => {
-      console.log('syncData函数执行完成');
+      console.log(language === 'zh' ? 'syncData函数执行完成' : 'syncData function complete');
     }).catch((error) => {
-      console.error('初始化同步数据失败:', error);
+      console.error(language === 'zh' ? '初始化同步数据失败:' : 'Initial data sync failed:', error);
       // 当同步数据失败时，不重置登录状态，这样用户就可以看到错误信息
       // 可以在这里添加错误提示，例如使用toast.error
     });
@@ -178,7 +202,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return true;
       }
     } catch (error) {
-      console.error('Supabase登录失败:', error);
+      console.error(language === 'zh' ? 'Supabase登录失败:' : 'Supabase login failed:', error);
       throw error;
     }
 
@@ -208,7 +232,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setFactoryList([...factoryList, newFactory]);
       }
     } catch (error) {
-      console.error('添加工厂失败:', error);
+      console.error(language === 'zh' ? '添加工厂失败:' : 'Add factory failed:', error);
     }
   };
 
@@ -222,7 +246,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       setFactoryList(factoryList.map(f => f.id === id ? factory : f));
     } catch (error) {
-      console.error('更新工厂失败:', error);
+      console.error(language === 'zh' ? '更新工厂失败:' : 'Update factory failed:', error);
     }
   };
 
@@ -231,7 +255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await factoryService.deleteFactory(id);
       setFactoryList(factoryList.filter(f => f.id !== id));
     } catch (error) {
-      console.error('删除工厂失败:', error);
+      console.error(language === 'zh' ? '删除工厂失败:' : 'Delete factory failed:', error);
     }
   };
 
@@ -243,7 +267,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData(); // 同步数据，确保显示最新的供应商列表
       }
     } catch (error) {
-      console.error('添加供应商失败:', error);
+      console.error(language === 'zh' ? '添加供应商失败:' : 'Add supplier failed:', error);
       throw error;
     }
   };
@@ -256,7 +280,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData(); // 同步数据，确保显示最新的供应商列表
       }
     } catch (error) {
-      console.error('更新供应商失败:', error);
+      console.error(language === 'zh' ? '更新供应商失败:' : 'Update supplier failed:', error);
       throw error;
     }
   };
@@ -269,7 +293,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData(); // 同步数据，确保显示最新的供应商列表
       }
     } catch (error) {
-      console.error('删除供应商失败:', error);
+      console.error(language === 'zh' ? '删除供应商失败:' : 'Delete supplier failed:', error);
       throw error;
     }
   };
@@ -282,7 +306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData();
       }
     } catch (error) {
-      console.error('添加客户失败:', error);
+      console.error(language === 'zh' ? '添加客户失败:' : 'Add customer failed:', error);
       throw error;
     }
   };
@@ -295,7 +319,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData();
       }
     } catch (error) {
-      console.error('更新客户失败:', error);
+      console.error(language === 'zh' ? '更新客户失败:' : 'Update customer failed:', error);
       throw error;
     }
   };
@@ -308,7 +332,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData();
       }
     } catch (error) {
-      console.error('删除客户失败:', error);
+      console.error(language === 'zh' ? '删除客户失败:' : 'Delete customer failed:', error);
       throw error;
     }
   };
@@ -320,7 +344,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData();
       }
     } catch (error) {
-      console.error('添加用户失败:', error);
+      console.error(language === 'zh' ? '添加用户失败:' : 'Add user failed:', error);
     }
   };
 
@@ -331,7 +355,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData();
       }
     } catch (error) {
-      console.error('更新用户失败:', error);
+      console.error(language === 'zh' ? '更新用户失败:' : 'Update user failed:', error);
     }
   };
 
@@ -342,23 +366,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await syncData();
       }
     } catch (error) {
-      console.error('删除用户失败:', error);
+      console.error(language === 'zh' ? '删除用户失败:' : 'Delete user failed:', error);
     }
   };
 
   const addEvaluation = async (evaluation: Omit<EvaluationRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<EvaluationRecord | null> => {
     try {
-      console.log('开始添加评估记录:', evaluation);
+      console.log(language === 'zh' ? '开始添加评估记录:' : 'Start adding evaluation record:', evaluation);
       const newEvaluation = await evaluationService.createEvaluation(evaluation);
-      console.log('创建评估结果:', newEvaluation);
+      console.log(language === 'zh' ? '创建评估结果:' : 'Create evaluation result:', newEvaluation);
       if (newEvaluation) {
         setEvaluations([newEvaluation, ...evaluations]);
         return newEvaluation;
       }
-      console.error('创建评估记录返回 null');
+      console.error(language === 'zh' ? '创建评估记录返回 null' : 'Create evaluation returned null');
       return null;
     } catch (error) {
-      console.error('添加评估记录异常:', error);
+      console.error(language === 'zh' ? '添加评估记录异常:' : 'Add evaluation error:', error);
       return null;
     }
   };
@@ -375,7 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return null;
     } catch (error) {
-      console.error('更新评估记录失败:', error);
+      console.error(language === 'zh' ? '更新评估记录失败:' : 'Update evaluation failed:', error);
       return null;
     }
   };
@@ -385,7 +409,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await evaluationService.deleteEvaluation(id);
       setEvaluations(evaluations.filter(e => e.id !== id));
     } catch (error) {
-      console.error('删除评估记录失败:', error);
+      console.error(language === 'zh' ? '删除评估记录失败:' : 'Delete evaluation failed:', error);
     }
   };
 
@@ -422,6 +446,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setError,
         factoryType,
         setFactoryType,
+        language,
+        setLanguage,
         factoryList,
         setFactoryList,
         addFactory,

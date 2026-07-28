@@ -16,8 +16,10 @@ import {
   Shirt,
   Sparkles,
   Loader2,
+  Globe,
 } from 'lucide-react';
 import { FactoryType } from '../types';
+import { t, TranslationKey } from '../i18n/translations';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,9 +28,11 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, currentPage, onNavigate }: LayoutProps) {
-  const { user, logout, isEditMode, setEditMode, factoryType } = useApp();
+  const { user, logout, isEditMode, setEditMode, factoryType, language, setLanguage } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const tr = (key: TranslationKey) => t(language, key);
 
   // 工厂类型显示配置
   const factoryTypeConfig: Record<FactoryType, { label: string; icon: React.ReactNode; bgClass: string; textClass: string; borderClass: string }> = {
@@ -56,15 +60,15 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
   };
 
   const menuItems = [
-    { id: 'audit', label: '开始评估', icon: ClipboardList },
-    { id: 'history', label: '历史记录', icon: History },
-    { id: 'analytics', label: '数据分析', icon: BarChart3 },
-    ...(user?.role === 'sadmin' ? [{ id: 'admin', label: '系统管理', icon: Settings }] : []),
+    { id: 'audit', label: tr('menu.audit'), icon: ClipboardList },
+    { id: 'history', label: tr('menu.history'), icon: History },
+    { id: 'analytics', label: tr('menu.analytics'), icon: BarChart3 },
+    ...(user?.role === 'sadmin' ? [{ id: 'admin', label: tr('menu.admin'), icon: Settings }] : []),
   ];
 
   const handleNavigate = (page: string) => {
     if (isEditMode && page !== 'audit') {
-      if (!confirm('编辑模式未保存，确定要离开吗？')) {
+      if (!confirm(tr('common.unsavedWarning'))) {
         return;
       }
       setEditMode(false);
@@ -89,8 +93,8 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
             </div>
             {sidebarOpen && (
               <div className="overflow-hidden">
-                <h1 className="font-bold text-lg whitespace-nowrap">欧图审核系统</h1>
-                <p className="text-xs text-slate-400 whitespace-nowrap">Factory Audit</p>
+                <h1 className="font-bold text-lg whitespace-nowrap">{tr('app.title')}</h1>
+                <p className="text-xs text-slate-400 whitespace-nowrap">{tr('app.subtitle')}</p>
               </div>
             )}
           </div>
@@ -158,18 +162,40 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
               <div className="flex-1 overflow-hidden">
                 <p className="font-medium text-sm truncate">{user?.name}</p>
                 <p className="text-xs text-slate-400">
-                  {user?.role === 'sadmin' ? '高级管理员' : user?.role === 'admin' ? '管理员' : '评估员'}
+                  {user?.role === 'sadmin' ? tr('role.sadmin') : user?.role === 'admin' ? tr('role.admin') : tr('role.evaluator')}
                 </p>
               </div>
             )}
           </div>
           {sidebarOpen && (
+            <>
+              {/* 中英文切换按钮 */}
+              <button
+                onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
+                className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors border border-slate-700"
+                title={tr('language.switch')}
+              >
+                <Globe className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  {language === 'zh' ? '中文 / EN' : 'English / 中'}
+                </span>
+              </button>
+              <button
+                onClick={logout}
+                className="mt-2 w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="text-sm">{tr('menu.logout')}</span>
+              </button>
+            </>
+          )}
+          {!sidebarOpen && (
             <button
-              onClick={logout}
-              className="mt-4 w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+              onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
+              className="mt-3 w-full flex items-center justify-center p-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors border border-slate-700"
+              title={tr('language.switch')}
             >
-              <LogOut className="w-4 h-4" />
-              <span className="text-sm">退出登录</span>
+              <Globe className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -195,9 +221,9 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-bold text-lg">欧图审核系统</h1>
-              <p className="text-xs text-slate-400">Factory Audit</p>
-            </div>
+            <h1 className="font-bold text-lg">{tr('app.title')}</h1>
+            <p className="text-xs text-slate-400">{tr('app.subtitle')}</p>
+          </div>
           </div>
           <button onClick={() => setMobileOpen(false)} className="p-2">
             <X className="w-5 h-5" />
@@ -231,19 +257,29 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
               <User className="w-5 h-5 text-slate-300" />
             </div>
             <div>
-              <p className="font-medium text-sm">{user?.name}</p>
-              <p className="text-xs text-slate-400">
-                {user?.role === 'sadmin' ? '高级管理员' : user?.role === 'admin' ? '管理员' : '评估员'}
-              </p>
-            </div>
+            <p className="font-medium text-sm">{user?.name}</p>
+            <p className="text-xs text-slate-400">
+              {user?.role === 'sadmin' ? tr('role.sadmin') : user?.role === 'admin' ? tr('role.admin') : tr('role.evaluator')}
+            </p>
           </div>
-          <button
-            onClick={logout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>退出登录</span>
-          </button>
+        </div>
+        {/* 中英文切换按钮（移动端） */}
+        <button
+          onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
+          className="mb-3 w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors border border-slate-700"
+        >
+          <Globe className="w-4 h-4" />
+          <span className="text-sm font-medium">
+            {language === 'zh' ? '中文 / EN' : 'English / 中'}
+          </span>
+        </button>
+        <button
+          onClick={logout}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>{tr('menu.logout')}</span>
+        </button>
         </div>
       </aside>
 
@@ -257,7 +293,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
           >
             <Menu className="w-6 h-6" />
           </button>
-          <h1 className="font-bold">欧图审核系统</h1>
+          <h1 className="font-bold">{tr('app.title')}</h1>
           <div className="w-10" />
         </header>
 

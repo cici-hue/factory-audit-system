@@ -9,7 +9,7 @@ import {
   hideLoading
 } from './pdfImageUtils';
 
-// 不合格项信息接口
+// 不合格项信息接口 (Failed item info interface)
 interface FailedItemInfo {
   itemId: string;
   moduleName: string;
@@ -22,14 +22,14 @@ interface FailedItemInfo {
   useDetailScore?: boolean;
   subDetails?: { id: string; name: string }[];
   subDetailChecks?: { [key: string]: boolean };
-  reverseScoring?: boolean;  // 新增：反向计分标记
-  selectedScore?: number;    // Flat Knit 专用：选中的分数
+  reverseScoring?: boolean;  // Reverse scoring flag
+  selectedScore?: number;    // Flat Knit: selected score
 }
 
-// 合并所有工厂类型的模块
+// Merge all factory type modules
 const allModules: AuditModule[] = [...lightWovenModules, ...lingerieSwimwearModules, ...flatKnitModules];
 
-// 创建 item ID 到模块信息的映射
+// Create item ID to module info map
 const itemIdToModuleMap = new Map<string, { item: AuditItem; moduleName: string; subModuleName: string }>();
 allModules.forEach(module => {
   Object.entries(module.subModules).forEach(([subModuleName, subModule]) => {
@@ -39,11 +39,17 @@ allModules.forEach(module => {
   });
 });
 
-// 生成小点勾选详情的 HTML
-function generateSubDetailHTML(item: FailedItemInfo): string {
-  // Flat Knit 专用：显示选中的分数
+// Generate sub-detail check HTML
+function generateSubDetailHTML(item: FailedItemInfo, lang: 'zh' | 'en' = 'zh'): string {
+  const isEn = lang === 'en';
+  const metLabel = isEn ? 'Met' : '已满足';
+  const notMetLabel = isEn ? 'Not Met' : '未满足';
+
+  // Flat Knit: display selected score
   if (item.selectedScore !== undefined) {
-    const scoreText = item.selectedScore > 0 ? `得分: ${item.selectedScore}分` : `得分: ${item.selectedScore}分（未达标）`;
+    const scoreText = isEn
+      ? (item.selectedScore > 0 ? `Score: ${item.selectedScore}` : `Score: ${item.selectedScore} (Not Achieved)`)
+      : (item.selectedScore > 0 ? `得分: ${item.selectedScore}分` : `得分: ${item.selectedScore}分（未达标）`);
     return `<div class="item-details">${scoreText}</div>`;
   }
 
@@ -51,25 +57,21 @@ function generateSubDetailHTML(item: FailedItemInfo): string {
     return '';
   }
 
-  const notMetItems: string[] = [];   // 未满足
-  const metItems: string[] = [];      // 已满足
+  const notMetItems: string[] = [];   // Not met
+  const metItems: string[] = [];      // Met
 
   item.subDetails.forEach(sub => {
     const isSubChecked = item.subDetailChecks?.[sub.id] || false;
-    
+
     if (item.reverseScoring) {
-      // 反向计分（如尺寸测量）：
-      // 勾选了小点 = 该项有问题（未满足）
-      // 未勾选小点 = 该项合格（已满足）
+      // Reverse scoring (e.g. measurement): checked = issue (not met), unchecked = pass (met)
       if (isSubChecked) {
         notMetItems.push(sub.name);
       } else {
         metItems.push(sub.name);
       }
     } else {
-      // 正常计分：
-      // 勾选了小点 = 该项合格（已满足）
-      // 未勾选小点 = 该项有问题（未满足）
+      // Normal scoring: checked = pass (met), unchecked = issue (not met)
       if (isSubChecked) {
         metItems.push(sub.name);
       } else {
@@ -80,10 +82,12 @@ function generateSubDetailHTML(item: FailedItemInfo): string {
 
   let html = '';
   if (notMetItems.length > 0) {
-    html += `<div class="item-details"><span style="color: #f59e0b;">✗ 未满足: ${notMetItems.join(', ')}</span></div>`;
+    const symbol = isEn ? '✗' : '✗';
+    html += `<div class="item-details"><span style="color: #f59e0b;">${symbol} ${notMetLabel}: ${notMetItems.join(', ')}</span></div>`;
   }
   if (metItems.length > 0) {
-    html += `<div class="item-details"><span style="color: #10b981;">✓ 已满足: ${metItems.join(', ')}</span></div>`;
+    const symbol = isEn ? '✓' : '✓';
+    html += `<div class="item-details"><span style="color: #10b981;">${symbol} ${metLabel}: ${metItems.join(', ')}</span></div>`;
   }
 
   return html;
@@ -293,17 +297,33 @@ function sortByPriority(
   return { urgentItems, normalItems, urgentPhotos, normalPhotos };
 }
 
-// 生成照片模块 HTML
+// Generate photo section HTML
 function generatePhotoSectionHTML(
   urgentPhotos: PhotoItem[],
   normalPhotos: PhotoItem[],
-  hasMore: boolean
+  hasMore: boolean,
+  lang: 'zh' | 'en' = 'zh'
 ): string {
+  const isEn = lang === 'en';
+  const titleText = isEn ? '5. Site Photos' : '五、现场照片';
+  const noPhotosText = isEn ? 'No site photos uploaded' : '未上传现场照片';
+  const altText = isEn ? 'Site Photo' : '现场照片';
+  const loadErrorText = isEn ? 'Photo loading failed' : '照片加载失败';
+  const issueLabel = isEn ? 'Issue: ' : '问题: ';
+  const commentLabel = isEn ? 'Note: ' : '备注: ';
+  const urgentSectionTitle = isEn ? '(1) Urgent Item Site Photos' : '（一）急需整改项现场照片';
+  const normalSectionTitle = isEn ? 'General Item Site Photos' : '一般整改项现场照片';
+  const sectionPrefix1 = isEn ? '(1) ' : '（一）';
+  const sectionPrefix2 = isEn ? '(2) ' : '（二）';
+  const limitNote = isEn
+    ? 'Too many photos, only first 50 are shown. Please login for more.'
+    : '照片数量较多，仅展示前 50 张，更多照片请登录系统查看';
+
   if (urgentPhotos.length === 0 && normalPhotos.length === 0) {
     return `
-      <h2>五、现场照片</h2>
+      <h2>${titleText}</h2>
       <p style="color: #999; font-style: italic; padding: 20px; text-align: center;">
-        未上传现场照片
+        ${noPhotosText}
       </p>
     `;
   }
@@ -311,91 +331,94 @@ function generatePhotoSectionHTML(
   const generatePhotoCard = (photo: PhotoItem): string => {
     const imageSrc = photo.imageBase64 || photo.imageUrl;
     const badgeClass = photo.isUrgent ? 'urgent' : 'normal';
-    
+
     return `
       <div class="photo-card">
         <div class="photo-index ${badgeClass}">${photo.priority}</div>
-        <img src="${imageSrc}" alt="现场照片" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img src="${imageSrc}" alt="${altText}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="photo-error" style="display: none; height: 180px; align-items: center; justify-content: center; background: #f3f4f6; color: #9ca3af; font-size: 12px;">
-          照片加载失败
+          ${loadErrorText}
         </div>
         <div class="photo-info">
           <div class="photo-location">${photo.moduleName} - ${photo.subModuleName}</div>
           <div class="photo-desc">${photo.itemName}</div>
-          ${photo.details.length > 0 ? `<div class="photo-detail">问题: ${photo.details.join(', ')}</div>` : ''}
-          ${photo.comment ? `<div class="photo-comment">备注: ${photo.comment}</div>` : ''}
+          ${photo.details.length > 0 ? `<div class="photo-detail">${issueLabel}${photo.details.join(', ')}</div>` : ''}
+          ${photo.comment ? `<div class="photo-comment">${commentLabel}${photo.comment}</div>` : ''}
         </div>
       </div>
     `;
   };
 
   return `
-    <h2>五、现场照片</h2>
-    
+    <h2>${titleText}</h2>
+
     ${urgentPhotos.length > 0 ? `
     <div class="photo-section urgent-photos">
-      <h3>（一）急需整改项现场照片</h3>
+      <h3>${urgentSectionTitle}</h3>
       <div class="photo-grid">
         ${urgentPhotos.map(generatePhotoCard).join('')}
       </div>
     </div>
     ` : ''}
-    
+
     ${normalPhotos.length > 0 ? `
     <div class="photo-section normal-photos">
-      <h3>${urgentPhotos.length > 0 ? '（二）' : '（一）'}一般整改项现场照片</h3>
+      <h3>${urgentPhotos.length > 0 ? sectionPrefix2 : sectionPrefix1}${normalSectionTitle}</h3>
       <div class="photo-grid">
         ${normalPhotos.map(generatePhotoCard).join('')}
       </div>
     </div>
     ` : ''}
-    
+
     ${hasMore ? `
     <p style="color: #666; font-size: 11px; text-align: center; margin-top: 20px; padding: 10px; background: #f9fafb; border-radius: 4px;">
-      照片数量较多，仅展示前 50 张，更多照片请登录系统查看
+      ${limitNote}
     </p>
     ` : ''}
   `;
 }
 
-// 创建打印友好的HTML内容
+// Create print-friendly HTML content
 async function createPrintContent(
-  record: EvaluationRecord, 
-  lastEvaluation?: EvaluationRecord
+  record: EvaluationRecord,
+  lastEvaluation?: EvaluationRecord,
+  lang: 'zh' | 'en' = 'zh'
 ): Promise<string> {
-  // 收集不合格项和照片
+  const isEn = lang === 'en';
+
+  // Collect failed items and photos
   const { failedItems, photoItems } = collectFailedItems(record);
-  
-  // 根据优先级排序
+
+  // Sort by priority
   const { urgentItems, normalItems, urgentPhotos, normalPhotos } = sortByPriority(
-    failedItems, 
-    photoItems, 
+    failedItems,
+    photoItems,
     record.failedItemsPriority
   );
 
-  // 限制照片数量
+  // Limit photo count
   const allPhotos = [...urgentPhotos, ...normalPhotos];
   const { photos: limitedPhotos, hasMore } = limitPhotos(allPhotos, 50);
-  
-  // 重新分组
+
+  // Re-group
   const finalUrgentPhotos = limitedPhotos.filter(p => p.isUrgent);
   const finalNormalPhotos = limitedPhotos.filter(p => !p.isUrgent);
 
-  // 处理照片（下载并压缩）
+  // Process photos (download and compress)
   let processedUrgentPhotos = finalUrgentPhotos;
   let processedNormalPhotos = finalNormalPhotos;
-  
+
   if (limitedPhotos.length > 0) {
-    console.log(`开始处理 ${limitedPhotos.length} 张照片...`);
+    console.log(`Starting to process ${limitedPhotos.length} photos...`);
     const processed = await processPhotosBatch(limitedPhotos, 3, (completed, total) => {
-      console.log(`照片处理进度: ${completed}/${total}`);
+      console.log(`Photo progress: ${completed}/${total}`);
     });
     processedUrgentPhotos = processed.filter(p => p.isUrgent);
     processedNormalPhotos = processed.filter(p => !p.isUrgent);
-    console.log('照片处理完成');
+    console.log('Photo processing complete');
   }
 
-  // 整改复查模式的对比数据
+  // Rectification review comparison data
   const improvedItems: FailedItemInfo[] = [];
   const remainingItems: FailedItemInfo[] = [];
   const newItems: FailedItemInfo[] = [];
@@ -435,20 +458,69 @@ async function createPrintContent(
     });
   }
 
-  // 生成照片模块 HTML
+  // Generate photo section HTML
   const photoSectionHTML = generatePhotoSectionHTML(
     processedUrgentPhotos,
     processedNormalPhotos,
-    hasMore
+    hasMore,
+    lang
   );
 
-  // 生成打印友好的HTML
+  // Bilingual labels
+  const labels = {
+    htmlLang: isEn ? 'en' : 'zh-CN',
+    reportTitle: isEn ? 'Factory Audit Report' : '工厂流程审核报告',
+    pageTitle: isEn ? `Factory Audit Report - ${record.factoryName}` : `工厂流程审核报告 - ${record.factoryName}`,
+    factory: isEn ? 'Factory: ' : '工厂名称：',
+    supplier: isEn ? 'Supplier: ' : '供应商：',
+    orderNo: isEn ? 'Order No.: ' : '订单号：',
+    styleNo: isEn ? 'Style No.: ' : '款号：',
+    productionStatus: isEn ? 'Production Status: ' : '生产状态：',
+    evalDate: isEn ? 'Audit Date: ' : '评估日期：',
+    evaluator: isEn ? 'Evaluator: ' : '评估人员：',
+    evalType: isEn ? 'Audit Type: ' : '审核性质：',
+    totalScore: isEn ? 'Total Score: ' : '工厂总分：',
+    scoreNote: isEn ? 'Score Note: ' : '得分说明：',
+    scoreAccum: isEn
+      ? `This rectification review score is accumulated based on the last evaluation (${lastEvaluation?.evalDate}, score ${lastEvaluation?.overallPercent.toFixed(2)}%)`
+      : `本次整改复查得分基于上次评估(${lastEvaluation?.evalDate}，得分${lastEvaluation?.overallPercent.toFixed(2)}%)进行累加计算`,
+    compareTitle: isEn ? '1. Rectification Comparison' : '一、整改对比分析',
+    compareText: isEn
+      ? `This rectification review compared with the evaluation on ${lastEvaluation?.evalDate}:`
+      : `本次整改复查与 ${lastEvaluation?.evalDate} 的评估结果对比：`,
+    issueTitle: isEn ? '1. Summary of Issues' : '一、存在问题汇总',
+    issueText: isEn ? 'Please pay attention to the following aspects:' : '经评估，请该工厂注意以下方面：',
+    improved: isEn ? '(1) Rectified Items' : '（一）已整改项目',
+    remaining: isEn ? '(2) Remaining Issues After Rectification' : '（二）整改后仍存在的问题',
+    newIssues: isEn ? '(3) New Issues' : '（三）新增问题',
+    improvedSymbol: isEn ? '✅ Rectified' : '✅ 已整改',
+    remainingSymbol: isEn ? '❌ Still Not Rectified' : '❌ 仍未整改',
+    newSymbol: isEn ? '⚠️ New Issue' : '⚠️ 新问题',
+    noChange: isEn ? 'No significant changes were found in this rectification review' : '本次整改复查未发现明显变化',
+    urgentSection: isEn ? '(1) Urgent Items (Top 10)' : '（一）急需整改项（前10项）',
+    generalSection: isEn ? '(2) General Items' : '（二）一般整改项',
+    urgentBadge: isEn ? 'Urgent' : '急需',
+    generalBadge: isEn ? 'General' : '一般',
+    noUrgent: isEn ? 'No urgent items' : '无急需整改项',
+    noGeneral: isEn ? 'No general items' : '无一般整改项',
+    keyProcess: isEn ? '(1) Key Process' : '（一）重点工序',
+    otherProcess: isEn ? '(2) Other Process' : '（二）其他工序',
+    noKeyIssue: isEn ? 'No key process issues found in this evaluation' : '本次评估未发现重点工序问题',
+    noOtherIssue: isEn ? 'No other process issues found in this evaluation' : '本次评估未发现其他工序问题',
+    evaluatorComment: isEn ? '4. Evaluator Comments' : '四、评估者评论',
+    noComment: isEn ? 'No comments' : '无评论',
+    issueLabel: isEn ? 'Issue: ' : '问题: ',
+    commentLabel: isEn ? 'Comment: ' : '评论: ',
+    footer: isEn ? 'This report is auto-generated by Factory Audit System' : '此报告由欧图工厂审核系统自动生成',
+  };
+
+  // Generate print-friendly HTML
   const html = `
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${labels.htmlLang}">
 <head>
   <meta charset="UTF-8">
-  <title>工厂流程审核报告 - ${record.factoryName}</title>
+  <title>${labels.pageTitle}</title>
   <style>
     @page {
       size: A4;
@@ -460,7 +532,7 @@ async function createPrintContent(
       box-sizing: border-box;
     }
     body {
-      font-family: "Microsoft YaHei", "PingFang SC", "Heiti SC", "SimHei", sans-serif;
+      font-family: "Microsoft YaHei", "PingFang SC", "Heiti SC", "SimHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 12px;
       line-height: 1.6;
       color: #333;
@@ -553,8 +625,8 @@ async function createPrintContent(
       background: #6b7280;
       color: white;
     }
-    
-    /* 照片模块样式 */
+
+    /* Photo section styles */
     .photo-section {
       margin: 20px 0;
       break-inside: avoid;
@@ -640,7 +712,7 @@ async function createPrintContent(
       margin-top: 4px;
       font-style: italic;
     }
-    
+
     .footer {
       margin-top: 30px;
       text-align: center;
@@ -670,156 +742,156 @@ async function createPrintContent(
   </style>
 </head>
 <body>
-  <h1>工厂流程审核报告</h1>
+  <h1>${labels.reportTitle}</h1>
 
   <div class="info-box">
-    <p><strong>工厂名称：</strong>${record.factoryName}</p>
-    <p><strong>供应商：</strong>${record.supplierName || '-'}</p>
-    <p><strong>订单号：</strong>${record.orderNo || '-'}</p>
-    <p><strong>款号：</strong>${record.styleNo || '-'}</p>
-    <p><strong>生产状态：</strong>${record.productionStatus || '-'}</p>
-    <p><strong>评估日期：</strong>${record.evalDate}</p>
-    <p><strong>评估人员：</strong>${record.evaluator}</p>
-    <p><strong>审核性质：</strong>${record.evalType}</p>
-    <p class="score"><strong>工厂总分：</strong>${record.overallPercent.toFixed(2)}%</p>
-    ${lastEvaluation ? `<p><strong>得分说明：</strong>本次整改复查得分基于上次评估(${lastEvaluation.evalDate}，得分${lastEvaluation.overallPercent.toFixed(2)}%)进行累加计算</p>` : ''}
+    <p><strong>${labels.factory}</strong>${record.factoryName}</p>
+    <p><strong>${labels.supplier}</strong>${record.supplierName || '-'}</p>
+    <p><strong>${labels.orderNo}</strong>${record.orderNo || '-'}</p>
+    <p><strong>${labels.styleNo}</strong>${record.styleNo || '-'}</p>
+    <p><strong>${labels.productionStatus}</strong>${record.productionStatus || '-'}</p>
+    <p><strong>${labels.evalDate}</strong>${record.evalDate}</p>
+    <p><strong>${labels.evaluator}</strong>${record.evaluator}</p>
+    <p><strong>${labels.evalType}</strong>${record.evalType}</p>
+    <p class="score"><strong>${labels.totalScore}</strong>${record.overallPercent.toFixed(2)}%</p>
+    ${lastEvaluation ? `<p><strong>${labels.scoreNote}</strong>${labels.scoreAccum}</p>` : ''}
   </div>
 
   ${lastEvaluation ? `
-  <h2 style="color: #2563eb;">一、整改对比分析</h2>
-  <p>本次整改复查与 ${lastEvaluation.evalDate} 的评估结果对比：</p>
+  <h2 style="color: #2563eb;">${labels.compareTitle}</h2>
+  <p>${labels.compareText}</p>
   ` : `
-  <h2>一、存在问题汇总</h2>
-  <p>经评估，请该工厂注意以下方面：</p>
+  <h2>${labels.issueTitle}</h2>
+  <p>${labels.issueText}</p>
   `}
 
   ${lastEvaluation ? `
   ${improvedItems.length > 0 ? `
-  <h3 style="color: #22c55e;">（一）已整改项目</h3>
+  <h3 style="color: #22c55e;">${labels.improved}</h3>
   <ul>
     ${improvedItems.map((item, index) => `
       <li>
-        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ✅ 已整改</div>
-        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-        ${generateSubDetailHTML(item)}
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ${labels.improvedSymbol}</div>
+        ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item, lang)}
       </li>
     `).join('')}
   </ul>
   ` : ''}
 
   ${remainingItems.length > 0 ? `
-  <h3 style="color: #ef4444;">（二）整改后仍存在的问题</h3>
+  <h3 style="color: #ef4444;">${labels.remaining}</h3>
   <ul>
     ${remainingItems.map((item, index) => `
       <li>
-        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ❌ 仍未整改</div>
-        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-        ${generateSubDetailHTML(item)}
-        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ${labels.remainingSymbol}</div>
+        ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item, lang)}
+        ${item.comment ? `<div class="item-details">${labels.commentLabel}${item.comment}</div>` : ''}
       </li>
     `).join('')}
   </ul>
   ` : ''}
 
   ${newItems.length > 0 ? `
-  <h3 style="color: #ef4444;">（三）新增问题</h3>
+  <h3 style="color: #ef4444;">${labels.newIssues}</h3>
   <ul>
     ${newItems.map((item, index) => `
       <li>
-        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ⚠️ 新问题</div>
-        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-        ${generateSubDetailHTML(item)}
-        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+        <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName} ${labels.newSymbol}</div>
+        ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item, lang)}
+        ${item.comment ? `<div class="item-details">${labels.commentLabel}${item.comment}</div>` : ''}
       </li>
     `).join('')}
   </ul>
   ` : ''}
 
   ${improvedItems.length === 0 && remainingItems.length === 0 && newItems.length === 0 ? `
-  <p class="no-issue">本次整改复查未发现明显变化</p>
+  <p class="no-issue">${labels.noChange}</p>
   ` : ''}
   ` : `
   ${failedItems.length > 0 && record.failedItemsPriority && record.failedItemsPriority.length > 0 ? `
-  <!-- 有优先级排序的情况 -->
+  <!-- With priority sorting -->
   <div class="urgent-section">
-    <h3>（一）急需整改项（前10项）</h3>
+    <h3>${labels.urgentSection}</h3>
     ${urgentItems.length > 0 ? `
     <ul>
       ${urgentItems.map((item, index) => `
         <li>
           <div class="item-header">
             ${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}
-            <span class="priority-badge urgent-badge">急需</span>
+            <span class="priority-badge urgent-badge">${labels.urgentBadge}</span>
           </div>
-          ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-          ${generateSubDetailHTML(item)}
-          ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+          ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+          ${generateSubDetailHTML(item, lang)}
+          ${item.comment ? `<div class="item-details">${labels.commentLabel}${item.comment}</div>` : ''}
         </li>
       `).join('')}
     </ul>
-    ` : '<p class="no-issue">无急需整改项</p>'}
+    ` : `<p class="no-issue">${labels.noUrgent}</p>`}
   </div>
 
   <div class="normal-section">
-    <h3>（二）一般整改项</h3>
+    <h3>${labels.generalSection}</h3>
     ${normalItems.length > 0 ? `
     <ul>
       ${normalItems.map((item, index) => `
         <li>
           <div class="item-header">
             ${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}
-            <span class="priority-badge normal-badge">一般</span>
+            <span class="priority-badge normal-badge">${labels.generalBadge}</span>
           </div>
-          ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-          ${generateSubDetailHTML(item)}
-          ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+          ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+          ${generateSubDetailHTML(item, lang)}
+          ${item.comment ? `<div class="item-details">${labels.commentLabel}${item.comment}</div>` : ''}
         </li>
       `).join('')}
     </ul>
-    ` : '<p class="no-issue">无一般整改项</p>'}
+    ` : `<p class="no-issue">${labels.noGeneral}</p>`}
   </div>
   ` : `
-  <!-- 无优先级排序的情况（原有逻辑） -->
+  <!-- Without priority sorting (original logic) -->
   ${failedItems.filter(i => i.isKey).length > 0 ? `
-  <h3>（一）重点工序</h3>
+  <h3>${labels.keyProcess}</h3>
   <ul class="key-items">
     ${failedItems.filter(i => i.isKey).map((item, index) => `
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
-        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-        ${generateSubDetailHTML(item)}
-        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+        ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item, lang)}
+        ${item.comment ? `<div class="item-details">${labels.commentLabel}${item.comment}</div>` : ''}
       </li>
     `).join('')}
   </ul>
-  ` : `<p class="no-issue">本次评估未发现重点工序问题</p>`}
+  ` : `<p class="no-issue">${labels.noKeyIssue}</p>`}
 
-  <h3>（二）其他工序</h3>
+  <h3>${labels.otherProcess}</h3>
   ${failedItems.filter(i => !i.isKey).length > 0 ? `
   <ul>
     ${failedItems.filter(i => !i.isKey).map((item, index) => `
       <li>
         <div class="item-header">${index + 1}. ${item.moduleName} - ${item.subModuleName}: ${item.itemName}</div>
-        ${item.details.length > 0 ? `<div class="item-details">问题: ${item.details.join(', ')}</div>` : ''}
-        ${generateSubDetailHTML(item)}
-        ${item.comment ? `<div class="item-details">评论: ${item.comment}</div>` : ''}
+        ${item.details.length > 0 ? `<div class="item-details">${labels.issueLabel}${item.details.join(', ')}</div>` : ''}
+        ${generateSubDetailHTML(item, lang)}
+        ${item.comment ? `<div class="item-details">${labels.commentLabel}${item.comment}</div>` : ''}
       </li>
     `).join('')}
   </ul>
-  ` : `<p class="no-issue">本次评估未发现其他工序问题</p>`}
+  ` : `<p class="no-issue">${labels.noOtherIssue}</p>`}
   `}
   `}
 
-  <h2>四、评估者评论</h2>
+  <h2>${labels.evaluatorComment}</h2>
 
   ${record.comments ? `
   <p>${record.comments}</p>
-  ` : `<p style="color: #999;">无评论</p>`}
+  ` : `<p style="color: #999;">${labels.noComment}</p>`}
 
   ${photoSectionHTML}
 
   <div class="footer">
-    <p>此报告由欧图工厂审核系统自动生成</p>
+    <p>${labels.footer}</p>
   </div>
 </body>
 </html>
@@ -828,8 +900,9 @@ async function createPrintContent(
   return html;
 }
 
-export async function generatePDF(record: EvaluationRecord, lastEvaluation?: EvaluationRecord): Promise<void> {
-  // 显示加载提示
+export async function generatePDF(record: EvaluationRecord, lastEvaluation?: EvaluationRecord, lang: 'zh' | 'en' = 'zh'): Promise<void> {
+  const isEn = lang === 'en';
+  // Show loading indicator
   const loadingDiv = document.createElement('div');
   loadingDiv.innerHTML = `
     <div style="
@@ -852,7 +925,7 @@ export async function generatePDF(record: EvaluationRecord, lastEvaluation?: Eva
         max-width: 400px;
       ">
         <div style="font-size: 16px; color: #374151; margin-bottom: 16px;">
-          正在生成 PDF 报告...
+          ${isEn ? 'Generating PDF report...' : '正在生成 PDF 报告...'}
         </div>
         <div style="
           width: 200px;
@@ -871,7 +944,7 @@ export async function generatePDF(record: EvaluationRecord, lastEvaluation?: Eva
           "></div>
         </div>
         <div style="font-size: 12px; color: #9ca3af; margin-top: 12px;">
-          正在加载现场照片，请稍候...
+          ${isEn ? 'Loading site photos, please wait...' : '正在加载现场照片，请稍候...'}
         </div>
       </div>
     </div>
@@ -879,39 +952,39 @@ export async function generatePDF(record: EvaluationRecord, lastEvaluation?: Eva
   document.body.appendChild(loadingDiv);
 
   try {
-    // 更新进度
+    // Update progress
     const progressEl = document.getElementById('pdf-progress');
     if (progressEl) progressEl.style.width = '30%';
 
-    // 创建打印内容（异步，包含照片下载）
-    const printContent = await createPrintContent(record, lastEvaluation);
-    
+    // Create print content (async, includes photo download)
+    const printContent = await createPrintContent(record, lastEvaluation, lang);
+
     if (progressEl) progressEl.style.width = '80%';
 
-    // 创建新的窗口
+    // Create new window
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('请允许弹出窗口以生成PDF报告');
+      alert(isEn ? 'Please allow pop-up windows to generate the PDF report' : '请允许弹出窗口以生成PDF报告');
       return;
     }
 
-    // 写入内容
+    // Write content
     printWindow.document.write(printContent);
     printWindow.document.close();
 
     if (progressEl) progressEl.style.width = '100%';
 
-    // 等待内容加载完成后自动打印
+    // Auto print after content loads
     printWindow.onload = () => {
       setTimeout(() => {
-        // 移除加载提示
+        // Remove loading indicator
         document.body.removeChild(loadingDiv);
         printWindow.print();
       }, 500);
     };
   } catch (error) {
-    console.error('生成 PDF 失败:', error);
+    console.error(isEn ? 'PDF generation failed:' : '生成 PDF 失败:', error);
     document.body.removeChild(loadingDiv);
-    alert('生成 PDF 失败，请重试');
+    alert(isEn ? 'PDF generation failed, please try again' : '生成 PDF 失败，请重试');
   }
 }

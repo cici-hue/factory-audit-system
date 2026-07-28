@@ -233,7 +233,9 @@ export function limitPhotos(
 /**
  * 创建加载进度 HTML
  */
-export function createLoadingHTML(total: number): string {
+export function createLoadingHTML(total: number, language: 'zh' | 'en' = 'zh'): string {
+  const loadingText = language === 'en' ? 'Loading site photos... (<span id="loaded-count">0</span>/' + total + ')' : '正在加载现场照片... (<span id="loaded-count">0</span>/' + total + ')';
+  const compressingText = language === 'en' ? 'Photos are being compressed, please wait...' : '照片正在压缩处理中，请稍候...';
   return `
     <div id="photo-loading" style="
       padding: 40px;
@@ -243,7 +245,7 @@ export function createLoadingHTML(total: number): string {
       margin: 20px 0;
     ">
       <div style="font-size: 16px; color: #374151; margin-bottom: 16px;">
-        正在加载现场照片... (<span id="loaded-count">0</span>/${total})
+        ${loadingText}
       </div>
       <div style="
         width: 100%;
@@ -263,7 +265,7 @@ export function createLoadingHTML(total: number): string {
         "></div>
       </div>
       <div style="font-size: 12px; color: #9ca3af; margin-top: 12px;">
-        照片正在压缩处理中，请稍候...
+        ${compressingText}
       </div>
     </div>
   `;

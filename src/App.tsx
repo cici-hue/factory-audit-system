@@ -9,10 +9,12 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import AdminPage from './pages/AdminPage';
 import DatabaseSetupPage from './pages/DatabaseSetupPage';
 import { EvaluationRecord } from './types';
+import { t, TranslationKey } from './i18n/translations';
 
 function AppContent() {
-  const { isLoggedIn, user, setEditMode, isLoading, error, setError, factoryList, supplierList } = useApp();
+  const { isLoggedIn, user, setEditMode, isLoading, error, setError, factoryList, supplierList, language } = useApp();
   const [currentPage, setCurrentPage] = useState('audit');
+  const tr = (key: TranslationKey) => t(language, key);
 
   // 处理从历史记录页面编辑
   const handleEditFromHistory = (record: EvaluationRecord) => {
@@ -26,7 +28,7 @@ function AppContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
-          <p className="mt-4 text-gray-600">正在连接数据库...</p>
+          <p className="mt-4 text-gray-600">{tr('dbsetup.connecting')}</p>
         </div>
       </div>
     );
@@ -61,7 +63,7 @@ function AppContent() {
     <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          <strong className="font-bold">错误:</strong>
+          <strong className="font-bold">{tr('common.error')}:</strong>
           <span className="block sm:inline"> {error}</span>
         </div>
       )}
