@@ -44,6 +44,7 @@ export default function AuditPage() {
   } = useApp();
 
   const tr = (key: TranslationKey, params?: Record<string, string | number>) => t(language, key, params);
+  const isZh = language === 'zh';
 
   // 根据工厂类型获取评估模块和总分
   const auditModules = useMemo(() => getAuditModules(factoryType), [factoryType]);
